@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, VectorParams
 from openai import OpenAI
+from tqdm import tqdm
 
 # 이 파일은 JSON 파일을 읽어서 Qdrant에 임베딩 벡터와 함께 저장합니다.
 
