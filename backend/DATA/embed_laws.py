@@ -19,7 +19,7 @@ COLLECTION_NAME = "laws"
 DIM = 3072  # text-embedding-3-large 차원 수
 
 # --------------------------
-# Qdrant 컬렉션 생성 (없으면)
+# Qdrant 컬렉션 초기화
 # --------------------------
 try:
     qdrant.delete_collection(COLLECTION_NAME)
@@ -73,14 +73,21 @@ def main():
             article_number = article.get("조문번호", "")
             article_title = article.get("조문제목", "")
 
-            chunks = article["embedding_chunks"]
+            # ✅ 빈 텍스트 제거
+            chunks = [c for c in article["embedding_chunks"] if c.strip()]
+            if not chunks:
+                continue
 
             # ✅ 배치로 임베딩 생성
             embeddings = get_embeddings(chunks)
 
-            # ✅ PointStruct 모아서 한 번에 upsert
             points = []
             for chunk, emb in zip(chunks, embeddings):
+                # ✅ 벡터 길이 검증
+                if len(emb) != DIM:
+                    print(f"❌ 잘못된 벡터 길이 {len(emb)} for chunk: {chunk[:50]}")
+                    continue
+
                 point_id = hash_id(law_name, article_key, chunk)
 
                 payload = {
@@ -95,6 +102,7 @@ def main():
 
                 points.append(PointStruct(id=point_id, vector=emb, payload=payload))
 
+            # ✅ upsert 실행
             if points:
                 qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 

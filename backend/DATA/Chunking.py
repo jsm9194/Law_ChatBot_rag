@@ -13,12 +13,15 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 enc = tiktoken.get_encoding("cl100k_base")  # OpenAI 모델 토크나이저
 
 def count_tokens(text: str) -> int:
-    return len(enc.encode(text))
+    return len(enc.encode(text or ""))  # ✅ None 방지
 
 # -------------------------
 # 텍스트 라벨링 (항/호/목)
 # -------------------------
 def label_text(text: str, level: str) -> str:
+    if not text:
+        return ""
+
     text = text.strip()
 
     if level == "항":
@@ -48,6 +51,9 @@ def label_text(text: str, level: str) -> str:
 # 개정/신설/삭제 태그 추출
 # -------------------------
 def extract_amendments(text: str) -> list[dict]:
+    if not text:
+        return []
+
     pattern = r"<(개정|신설|삭제|타법개정)\s*([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(?:,\s*[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})*)>"
     matches = re.findall(pattern, text)
 
@@ -63,7 +69,7 @@ def extract_amendments(text: str) -> list[dict]:
 # -------------------------
 def recursive_chunk(level_name: str, items, header: str, max_tokens: int = 800) -> list[str]:
     chunks = []
-    for item in items:
+    for item in items or []:  # ✅ None 방지
         if not isinstance(item, dict):
             continue
 
@@ -103,23 +109,31 @@ def recursive_chunk(level_name: str, items, header: str, max_tokens: int = 800) 
 # -------------------------
 # 조문 단위 → Adaptive Chunking
 # -------------------------
+# -------------------------
+# 조문 단위 → Adaptive Chunking
+# -------------------------
 def build_article_chunks(article: dict, max_tokens: int = 800) -> list[str]:
     number = article.get("조문번호", "")
     title = article.get("조문제목", "")
     content = article.get("조문내용", "")
 
+    # ✅ 조문 제목 + 본문 항상 포함
     header = f"제{number}조 {title}".strip() if number and title and title not in content else ""
-    base_lines = [header, content.strip()] if content else [header]
+    base_lines = []
+    if header:
+        base_lines.append(header)
+    if content:
+        base_lines.append(content.strip())
 
     clauses = article.get("항", [])
     if isinstance(clauses, dict):
         clauses = [clauses]
 
-    # 항/호/목이 전혀 없는 경우
+    # 항/호/목이 전혀 없는 경우 → 제목+본문만 반환
     if not clauses:
         return ["\n".join(base_lines).strip()]
 
-    # 조문 전체 조립
+    # 조문 전체 조립 (본문 + 항/호/목)
     clause_lines = base_lines[:]
     for clause in clauses:
         if not isinstance(clause, dict):
@@ -128,7 +142,7 @@ def build_article_chunks(article: dict, max_tokens: int = 800) -> list[str]:
         if clause.get("항내용"):  # 항내용 있으면 추가
             clause_lines.append(label_text(clause["항내용"], "항"))
 
-        # 호가 있으면 추가
+        # 호
         items = clause.get("호", [])
         if isinstance(items, dict):
             items = [items]
@@ -136,7 +150,7 @@ def build_article_chunks(article: dict, max_tokens: int = 800) -> list[str]:
             if isinstance(item, dict) and item.get("호내용"):
                 clause_lines.append("  " + label_text(item["호내용"], "호"))
 
-            # 목이 있으면 추가
+            # 목
             subs = item.get("목", [])
             if isinstance(subs, dict):
                 subs = [subs]
@@ -152,9 +166,10 @@ def build_article_chunks(article: dict, max_tokens: int = 800) -> list[str]:
 
     # 길면 항 단위 이하로 내려가기
     if clauses:
-        return recursive_chunk("항", clauses, header, max_tokens)
+        return recursive_chunk("항", clauses, "\n".join(base_lines), max_tokens)
 
     return [full_text]
+
 
 # -------------------------
 # JSON 변환
@@ -167,7 +182,7 @@ def add_chunks(data: dict, law_name: str) -> dict:
         if article.get("조문여부") != "조문":
             continue
 
-        # 여기서 파일명 기반으로 법령 이름 주입
+        # ✅ 파일명 기반으로 법령 이름 주입
         article["law_name"] = law_name
 
         chunks = build_article_chunks(article)

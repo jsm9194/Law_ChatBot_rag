@@ -1,5 +1,6 @@
 import os
 import json
+import re
 
 INPUT_DIR = "./jsonData"
 OUTPUT_DIR = "./ArticleCleanData"
@@ -12,11 +13,36 @@ circled_num_map = {
     "⑯": "16", "⑰": "17", "⑱": "18", "⑲": "19", "⑳": "20",
 }
 
+
+def expand_ranges(text: str) -> str:
+    """
+    '제11조부터 제13조까지' → '제11조 제12조 제13조'
+    '제2항부터 제4항까지' → '제2항 제3항 제4항'
+    '제3호부터 제5호까지' → '제3호 제4호 제5호'
+    '제1목부터 제3목까지' → '제1목 제2목 제3목'
+    """
+    if not isinstance(text, str):
+        return text
+
+    # 조/항/호/목 전부 매칭
+    pattern = re.compile(r"제(\d+)(조|항|호|목)부터\s*제(\d+)\2까지")
+
+    def replacer(match):
+        start = int(match.group(1))
+        unit = match.group(2)  # 조 / 항 / 호 / 목
+        end = int(match.group(3))
+        expanded = " ".join([f"제{i}{unit}" for i in range(start, end + 1)])
+        return expanded
+
+    return pattern.sub(replacer, text)
+
 def normalize_text(text: str) -> str:
     if not isinstance(text, str):
         text = str(text)
     for k, v in circled_num_map.items():
         text = text.replace(k, v)
+
+    text = expand_ranges(text)
     return text.strip()
 
 def clean_article(article: dict) -> dict:

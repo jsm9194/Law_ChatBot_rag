@@ -1,12 +1,23 @@
-# 백엔스 api코드임
-# qdrant에서 백터검색하고 gpt로 답변 생성
-
 import os
 from fastapi import FastAPI
+from pydantic import BaseModel
+from dotenv import load_dotenv
+from qdrant_client import QdrantClient
+from openai import OpenAI
+
+# ----------------------
+# 환경설정
+# ----------------------
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+qdrant = QdrantClient(host="localhost", port=6333)
+COLLECTION_NAME = "laws"
 
 app = FastAPI()
 
+# ----------------------
 # 요청/응답 모델 정의
+# ----------------------
 class QuestionRequest(BaseModel):
     question: str
 
@@ -17,7 +28,6 @@ class AnswerResponse(BaseModel):
 # ----------------------
 # 유틸 함수
 # ----------------------
-
 def get_embedding(text: str):
     response = client.embeddings.create(
         model="text-embedding-3-large",
