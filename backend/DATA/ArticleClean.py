@@ -22,7 +22,7 @@ def normalize_text(text: str) -> str:
 def clean_article(article: dict) -> dict:
     cleaned = {}
     for k, v in article.items():
-        if k in ["조문변경여부", "조문이동이전", "조문이동이후", "호번호", "목번호"]:
+        if k in ["조문변경여부", "조문이동이전", "조문이동이후", "호번호", "목번호", "항번호"]:
             continue
         if k in ["조문내용", "조문제목", "항내용", "호내용", "목내용"]:
             cleaned[k] = normalize_text(v)
