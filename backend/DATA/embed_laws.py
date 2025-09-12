@@ -21,11 +21,17 @@ DIM = 3072  # text-embedding-3-large 차원 수
 # --------------------------
 # Qdrant 컬렉션 생성 (없으면)
 # --------------------------
-if COLLECTION_NAME not in [c.name for c in qdrant.get_collections().collections]:
-    qdrant.create_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(size=DIM, distance="Cosine"),
-    )
+try:
+    qdrant.delete_collection(COLLECTION_NAME)
+    print(f"🗑 기존 컬렉션 {COLLECTION_NAME} 삭제 완료")
+except Exception:
+    print("⚠️ 기존 컬렉션 없음, 새로 생성합니다")
+
+qdrant.create_collection(
+    collection_name=COLLECTION_NAME,
+    vectors_config=VectorParams(size=DIM, distance="Cosine"),
+)
+print(f"✅ 새 컬렉션 {COLLECTION_NAME} 생성 완료")
 
 # --------------------------
 # 유틸 함수
