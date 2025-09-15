@@ -42,12 +42,17 @@ def hash_id(law_name: str, article_key: str, text: str) -> str:
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
 def get_embeddings(texts: list[str]) -> list[list[float]]:
-    """OpenAI API로 배치 임베딩 생성"""
+    """OpenAI API로 배치 임베딩 생성 (실제 벡터 길이 출력)"""
     response = client.embeddings.create(
         model="text-embedding-3-large",
         input=texts
     )
-    return [d.embedding for d in response.data]
+    embeddings = []
+    for i, d in enumerate(response.data):
+        emb = d.embedding
+        print(f"⚡ 임베딩 길이: {len(emb)} (텍스트 예시: {texts[i][:30]!r})")
+        embeddings.append(emb)
+    return embeddings
 
 # --------------------------
 # 메인 로직
@@ -83,10 +88,11 @@ def main():
 
             points = []
             for chunk, emb in zip(chunks, embeddings):
-                # ✅ 벡터 길이 검증
                 if len(emb) != DIM:
-                    print(f"❌ 잘못된 벡터 길이 {len(emb)} for chunk: {chunk[:50]}")
-                    continue
+                    raise ValueError(
+                        f"❌ 벡터 차원 불일치: expected {DIM}, got {len(emb)} "
+                        f"(텍스트 앞부분: {chunk[:50]!r})"
+                    )
 
                 point_id = hash_id(law_name, article_key, chunk)
 
