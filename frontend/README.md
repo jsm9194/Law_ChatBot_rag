@@ -1,70 +1,113 @@
-# Getting Started with Create React App
+# ⚖️ 법률 RAG 챗봇 (Law ChatBot RAG)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+법제처 API와 판례 검색 API를 활용한 **법률 검색/상담 챗봇 서비스**입니다.  
+ChatGPT 스타일 UI를 기반으로, 질문에 대한 답변과 함께 **출처(법령/판례 본문)** 를 우측 사이드바에서 확인할 수 있습니다.  
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 🚀 주요 기능
 
-### `npm start`
+- GPT 스타일 UI (좌측 대화 목록 / 중앙 채팅 / 우측 출처 뷰어)
+- **법제처 API 연동** → 최신 법령 검색
+- **판례 검색 API 연동** → 관련 판례 목록 및 본문 확인
+- **RAG (Retrieval-Augmented Generation)** → Qdrant + OpenAI 임베딩 기반 검색
+- 출처 버튼 클릭 시, 우측 사이드바에서 법령/판례 원문 확인 (iframe)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 🛠️ 기술 스택
 
-### `npm test`
+### Frontend
+- [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+- [Vite](https://vitejs.dev/) → 빠른 개발 환경
+- [TailwindCSS](https://tailwindcss.com/) v4 → UI 스타일링
+- Custom Components (ChatGPT 스타일 채팅창, 사이드바, 출처 뷰어)
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Backend
+- [FastAPI](https://fastapi.tiangolo.com/) → API 서버
+- 법제처 OpenAPI, 판례 검색 API 연동
 
-### `npm run build`
+### RAG (검색/임베딩)
+- [Qdrant](https://qdrant.tech/) → 벡터 DB
+- [OpenAI Embedding API](https://platform.openai.com/docs/guides/embeddings)  
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 📂 프로젝트 구조
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```plaintext
+frontend/
+ ├─ public/                 # 정적 파일
+ ├─ src/
+ │   ├─ components/          # UI 컴포넌트
+ │   │   ├─ SidebarLeft.tsx  # 좌측 사이드바
+ │   │   ├─ ChatMessage.tsx  # 메시지 버블
+ │   │   ├─ ChatInput.tsx    # 입력창
+ │   │   ├─ ChatArea.tsx     # 중앙 채팅 영역
+ │   │   └─ SidebarRight.tsx # 우측 출처 뷰어
+ │   ├─ pages/
+ │   │   └─ ChatPage.tsx     # 전체 레이아웃 페이지
+ │   ├─ App.tsx              # 진입 컴포넌트
+ │   ├─ main.tsx             # ReactDOM 진입
+ │   └─ index.css            # Tailwind import
+ ├─ index.html               # HTML 템플릿
+ ├─ package.json
+ ├─ tailwind.config.js
+ ├─ postcss.config.js
+ └─ README.md
+````
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## ▶️ 실행 방법
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 1. 프론트엔드
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+👉 기본 실행 주소: [http://localhost:5173](http://localhost:5173)
 
-## Learn More
+### 2. 백엔드 (FastAPI)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+cd backend
+uvicorn main:app --reload
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+👉 기본 실행 주소: [http://localhost:8000](http://localhost:8000)
 
-### Code Splitting
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## 📌 향후 개발 계획
 
-### Analyzing the Bundle Size
+* ✅ UI 기본 레이아웃 (ChatGPT 스타일)
+* ✅ TailwindCSS v4 세팅
+* ⬜ FastAPI ↔ React API 연동
+* ⬜ Qdrant 연동 (벡터 검색)
+* ⬜ 판례 검색 API 적용
+* ⬜ 법령/판례 하이라이트 표시 기능
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## 👨‍💻 개발자 메모
 
-### Making a Progressive Web App
+* 윈도우 PowerShell 환경에서 Vite + Tailwind v4 설치시 `postcss` 설정 필요 → `@tailwindcss/postcss` 사용
+* shadcn/ui 대신 **직접 커스텀 컴포넌트**로 구현 (Vite 호환 문제 방지)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
 
-### Advanced Configuration
+## 📸 UI 미리보기
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### 전체 레이아웃
+![ChatPage Full](public/screenshot_full.png)
 
-### Deployment
+### 채팅 화면
+![Chat Messages](public/screenshot_chat.png)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### 입력창
+![Chat Input](public/screenshot_input.png)
 
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### 출처 뷰어
+![Source Sidebar](public/screenshot_source.png)
