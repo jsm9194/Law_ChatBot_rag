@@ -2,10 +2,10 @@ import requests
 import xml.etree.ElementTree as ET
 import os
 from typing import List, Dict, Optional
-
 import dotenv
-dotenv.load_dotenv()
+from utils.safe_request import safe_request
 
+dotenv.load_dotenv()
 LAW_OC_ID = os.getenv("LAW_OC_ID")
 
 SEARCH_URL = "http://www.law.go.kr/DRF/lawSearch.do"
@@ -40,9 +40,15 @@ def search_case_list(
     if datSrcNm: params["datSrcNm"] = datSrcNm
     if sort: params["sort"] = sort
 
-    resp = requests.get(SEARCH_URL, params=params)
-    resp.encoding = "utf-8"
-    root = ET.fromstring(resp.text)
+    resp = safe_request(SEARCH_URL, params)
+    if isinstance(resp, dict) and "error" in resp:
+        return [resp]  # 에러 발생 시 리스트 형태로 반환 (호출부에서 에러 메시지 처리 가능)
+
+    try:
+        resp.encoding = "utf-8"
+        root = ET.fromstring(resp.text)
+    except ET.ParseError as e:
+        return {"error": f"XML 파싱 실패: {e}"}
 
     cases = []
     for item in root.findall("prec")[:count]:
@@ -74,15 +80,18 @@ def get_case_detail(case_id: str) -> Dict:
         "ID": case_id,
         "type": "JSON"
     }
-    resp = requests.get(url, params=params)
-    resp.encoding = "utf-8"
+
+    resp = safe_request(url, params)
+    if isinstance(resp, dict) and "error" in resp:
+        return resp  # API 호출 자체가 실패했을 때 그대로 반환
 
     try:
+        resp.encoding = "utf-8"
         data = resp.json()
     except Exception as e:
         return {"error": f"JSON 파싱 실패: {e}", "raw": resp.text[:300]}
 
-    # Prec 키가 있으면 사용, 없으면 루트 전체 사용
+    # Prec 키 확인
     item = data.get("Prec")
     if not item:
         return {"error": "판례 본문을 찾을 수 없음", "raw": data}
@@ -104,7 +113,6 @@ def get_case_detail(case_id: str) -> Dict:
         "판결요지": clean_html(item.get("판결요지")),
         "판례전문": clean_html(item.get("판례내용")),
     }
-
 
 
 # ================================
