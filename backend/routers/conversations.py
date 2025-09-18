@@ -18,12 +18,30 @@ class ConversationCreate(BaseModel):
     user_id: str
     title: str | None = None
 
+class ConversationUpdate(BaseModel):
+    title: str | None = None
+
 @router.post("/conversation/new")
 def create_conversation(req: ConversationCreate, db: Session = Depends(get_db)):
     conv = crud.create_conversation(db, req.user_id, req.title)
     return {"conversation_id": conv.id, "title": conv.title}
 
+
 @router.get("/conversations/{user_id}")
 def get_conversations(user_id: str, db: Session = Depends(get_db)):
     convs = crud.get_conversations(db, user_id)
     return [{"id": c.id, "title": c.title, "created_at": c.created_at} for c in convs]
+
+
+# ✅ 대화 제목 변경
+@router.patch("/conversation/{conversation_id}")
+def update_conversation(conversation_id: str, req: ConversationUpdate, db: Session = Depends(get_db)):
+    conv = crud.update_conversation(db, conversation_id, req.title)
+    return {"id": conv.id, "title": conv.title}
+
+
+# ✅ 대화 삭제
+@router.delete("/conversation/{conversation_id}")
+def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    crud.delete_conversation(db, conversation_id)
+    return {"message": "deleted"}

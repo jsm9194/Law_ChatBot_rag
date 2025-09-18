@@ -9,7 +9,7 @@ Base를 상속받아 테이블로 매핑됨
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from datetime import datetime
-from database import Base
+from .database import Base
 
 
 class Conversation(Base):

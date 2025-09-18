@@ -10,7 +10,7 @@ FastAPI에서 직접 DB에 쿼리하지 않고, 이 CRUD 함수를 통해서만 
 
 from uuid import uuid4
 from sqlalchemy.orm import Session
-from models import Conversation, ChatLog
+from .models import Conversation, ChatLog
 
 # 새 대화 시작
 def create_conversation(db: Session, user_id: str, title: str = None):
@@ -52,3 +52,22 @@ def save_message(db: Session, conversation_id: str, user_id: str, role: str, con
     db.commit()
     db.refresh(log)
     return log
+
+
+def update_conversation(db: Session, conversation_id: str, title: str = None):
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        raise Exception("Conversation not found")
+    if title:
+        conv.title = title
+    db.commit()
+    db.refresh(conv)
+    return conv
+
+
+def delete_conversation(db: Session, conversation_id: str):
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        raise Exception("Conversation not found")
+    db.delete(conv)
+    db.commit()
