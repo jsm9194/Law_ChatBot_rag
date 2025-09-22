@@ -32,6 +32,17 @@ body {
   min-height: 100vh;
 }
 
+html, body {
+  @apply font-sans text-sm text-gray-800;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
@@ -67,4 +78,23 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
+}
+
+
+/* ✅ 커스텀 스크롤바 */
+::-webkit-scrollbar {
+  width: 4px;              /* 스크롤바 두께 */
+}
+
+::-webkit-scrollbar-track {
+  background: #ffffff;     /* 스크롤 트랙 배경 (흰색) */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cfcfcf;  /* 스크롤바 색 */
+  border-radius: 4px;        /* 둥근 모서리 */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #a0a0a0;  /* hover 시 진해짐 */
 }
