@@ -18,6 +18,10 @@ export default function ChatArea() {
     if (!draft.trim() || !conversationId) return;
     await sendMessage(conversationId, userId, draft.trim());
     setDraft(conversationId, ""); // 전송 후 초기화
+
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   // 최신응답으로 스크롤
@@ -27,7 +31,7 @@ export default function ChatArea() {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isLoading]);
+  }, [isLoading]);
 
 
   // ✅ textarea 높이 자동 조절

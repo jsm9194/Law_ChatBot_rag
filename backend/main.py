@@ -145,22 +145,32 @@ tools = [
 # 실제 툴 함수 매핑
 # ===============================
 def call_tool(name: str, arguments: dict):
-    print(f"⚡ call_tool 실행됨: {name}, {arguments}")
+    print("⚡ [TOOL CALL]")
+    print(f"  📌 실행된 툴: {name}")
+    print(f"  📎 전달 인자: {json.dumps(arguments, ensure_ascii=False)}")
+
     if name == "law":
-        return ask_law(arguments["query"])
+        result = ask_law(arguments["query"])
     elif name == "search_cases":
-        cases = search_case_list(arguments["query"], arguments.get("count", 5))
-        return {"cases": cases}
+        result = {"cases": search_case_list(arguments["query"], arguments.get("count", 5))}
     elif name == "case_detail":
-        return get_case_detail(arguments["case_id"])
+        result = get_case_detail(arguments["case_id"])
     elif name == "web_search":
-        return google_search(
+        result = google_search(
             arguments["query"],
             arguments.get("count", 5),
             arguments.get("time_range", "any")
         )
     else:
-        return {"error": f"Unknown tool: {name}"}
+        result = {"error": f"Unknown tool: {name}"}
+
+    # ✅ 툴 결과도 로깅
+    preview = str(result)
+    if len(preview) > 500:  # 너무 길면 자르기
+        preview = preview[:500] + " ... (생략)"
+    print(f"  ✅ 툴 결과: {preview}\n")
+
+    return result
 
     
 # ===============================
@@ -168,6 +178,9 @@ def call_tool(name: str, arguments: dict):
 # ===============================
 @app.post("/ask")
 def ask_api(query: Query, db: Session = Depends(get_db)):
+    print("\n🚀 [ASK 호출됨]")
+    print(f"  대화 ID: {query.conversation_id}")
+    print(f"  질문: {query.question}\n")
     # ✅ DB에서 최근 10개 로그 불러오기
     logs = (
         db.query(ChatLog)

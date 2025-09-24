@@ -1,7 +1,6 @@
-// store/chatStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import axios from "axios";
+import axios, { AxiosError, isAxiosError } from "axios";
 
 export interface Message {
   role: "user" | "assistant";
@@ -25,15 +24,30 @@ interface ChatState {
   // 채팅방 선택
   setConversationId: (id: string) => void;
 
-  // ✅ 대화방별 draft
+  // draft (대화방별 입력 저장)
   drafts: Record<string, string>;
   setDraft: (conversationId: string, val: string) => void;
 
-  // ✅ 반환 타입을 Conversation 으로 변경
+  // API
   createConversation: (userId: string, title?: string) => Promise<Conversation>;
   loadConversations: (userId: string) => Promise<void>;
-  loadMessages: (conversationId: string) => Promise<void>;
+  loadMessages: (conversationId: string, offset?: number, limit?: number) => Promise<void>;
   sendMessage: (conversationId: string, userId: string, content: string) => Promise<void>;
+}
+
+// ✅ 공통 에러 핸들러
+function handleAxiosError(err: unknown): string {
+  if (isAxiosError(err)) {
+    const axiosErr = err as AxiosError<{ detail?: string; message?: string }>;
+    return (
+      axiosErr.response?.data?.detail ||
+      axiosErr.response?.data?.message ||
+      `API 요청 실패 (${axiosErr.response?.status})`
+    );
+  } else if (err instanceof Error) {
+    return err.message;
+  }
+  return "알 수 없는 오류";
 }
 
 export const useChatStore = create<ChatState>()(
@@ -45,7 +59,6 @@ export const useChatStore = create<ChatState>()(
       isLoading: false,
       error: null,
 
-      // ✅ draft 관리 (대화방별)
       drafts: {},
       setDraft: (conversationId, val) =>
         set((state) => ({
@@ -72,9 +85,9 @@ export const useChatStore = create<ChatState>()(
           set({ conversationId: newConv.id, messages: [] });
           await useChatStore.getState().loadConversations(userId);
 
-          return newConv; // ✅ 이제 Sidebar에서 사용 가능
-        } catch (err: any) {
-          set({ error: err.message });
+          return newConv;
+        } catch (err: unknown) {
+          set({ error: handleAxiosError(err) });
           throw err;
         } finally {
           set({ isLoading: false });
@@ -89,23 +102,30 @@ export const useChatStore = create<ChatState>()(
             `http://localhost:8000/conversations/${userId}`
           );
           set({ conversations: res.data });
-        } catch (err: any) {
-          set({ error: err.message });
+        } catch (err: unknown) {
+          set({ error: handleAxiosError(err) });
         } finally {
           set({ isLoading: false });
         }
       },
 
-      // 특정 대화 메시지 불러오기
-      loadMessages: async (conversationId) => {
+      // 특정 대화 메시지 불러오기 (✅ 레이지 로딩 적용)
+      loadMessages: async (conversationId, offset = 0, limit = 20) => {
         set({ isLoading: true, error: null });
         try {
           const res = await axios.get<Message[]>(
-            `http://localhost:8000/conversation/${conversationId}`
+            `http://localhost:8000/conversation/${conversationId}?offset=${offset}&limit=${limit}`
           );
-          set({ conversationId, messages: res.data });
-        } catch (err: any) {
-          set({ error: err.message });
+
+          set((state) => ({
+            conversationId,
+            messages:
+              offset === 0
+                ? res.data // ✅ 첫 로딩은 새로 세팅
+                : [...res.data, ...state.messages], // ✅ 스크롤 로딩은 앞에 붙이기
+          }));
+        } catch (err: unknown) {
+          set({ error: handleAxiosError(err) });
         } finally {
           set({ isLoading: false });
         }
@@ -144,13 +164,13 @@ export const useChatStore = create<ChatState>()(
             role: "assistant",
             content: answer,
           });
-        } catch (err: any) {
-          set({ error: err.message });
+        } catch (err: unknown) {
+          set({ error: handleAxiosError(err) });
         } finally {
           set({ isLoading: false });
         }
       },
     }),
-    { name: "chat-storage" } // ✅ localStorage key
+    { name: "chat-storage" }
   )
 );
