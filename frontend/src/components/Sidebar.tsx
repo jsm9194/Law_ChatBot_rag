@@ -1,18 +1,22 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/chatStore";
 import { useUIStore } from "../store/uiStore";
 import axios from "axios";
-import { NotebookPen, PanelRightClose, PanelRightOpen, SearchCheck } from "lucide-react"; // ✅ 아이콘 교체
+import {
+  NotebookPen,
+  PanelRightClose,
+  PanelRightOpen,
+  SearchCheck,
+} from "lucide-react";
 
 export default function Sidebar() {
-
   const {
     conversations,
     loadConversations,
     loadMessages,
     createConversation,
-    isLoading,
-    error,
+    conversationId,
+    setConversationId,
   } = useChatStore();
 
   const { sidebarOpen, toggleSidebar } = useUIStore();
@@ -23,16 +27,13 @@ export default function Sidebar() {
   const [editTitle, setEditTitle] = useState<string>("");
 
   const menuRef = useRef<HTMLDivElement>(null);
-  
-// -------------------이름바꾸기
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (editingId && inputRef.current) {
-      inputRef.current.select(); // ✅ 처음 edit 모드일 때 한 번만 전체 선택
+      inputRef.current.select();
     }
   }, [editingId]);
-// -------------------
 
   // 대화 목록 불러오기
   useEffect(() => {
@@ -52,11 +53,21 @@ export default function Sidebar() {
     };
   }, []);
 
-  const handleSelectConversation = (id: string) => loadMessages(id);
-  const handleNewConversation = async () => await createConversation(userId);
+  // 대화 선택
+  const handleSelectConversation = async (id: string) => {
+    setConversationId(id); // ✅ 현재 선택 상태 갱신
+    await loadMessages(id);
+  };
 
+  // 새 대화 생성
+  const handleNewConversation = async () => {
+    const newConv = await createConversation(userId);
+    setConversationId(newConv.id); // ✅ 새 대화 생성 후 자동 선택
+  };
+
+  // 이름 바꾸기
   const handleRename = async (convId: string) => {
-  const newTitle = editTitle.trim();
+    const newTitle = editTitle.trim();
     if (!newTitle) {
       setEditingId(null);
       return;
@@ -64,24 +75,23 @@ export default function Sidebar() {
 
     try {
       await axios.patch(`http://localhost:8000/conversation/${convId}`, {
-        title: newTitle, // ✅ 백엔드에서 요구하는 필드 확인 필요
+        title: newTitle,
       });
 
-      // ✅ 로컬 상태 즉시 반영 (UX 개선)
+      // ✅ 로컬 상태 즉시 반영
       useChatStore.setState((state) => ({
         conversations: state.conversations.map((c) =>
           c.id === convId ? { ...c, title: newTitle } : c
         ),
       }));
 
-      // 서버와 동기화 (보수적)
       await loadConversations(userId);
     } catch (err) {
       console.error("이름 변경 실패:", err);
       alert("이름을 바꾸지 못했습니다.");
     } finally {
       setEditingId(null);
-      setEditTitle(""); // ✅ 다음번 rename 시 초기화
+      setEditTitle("");
     }
   };
 
@@ -94,7 +104,7 @@ export default function Sidebar() {
 
   return (
     <div className="h-full flex flex-col border-r border-gray-300 bg-gray-50 text-gray-800">
-      {/* 상단: 열기/닫기 아이콘 (위아래로 배치, 상태에 따라 하나만 보임) */}
+      {/* 상단: 열기/닫기 버튼 */}
       <div className="flex flex-col items-center p-2">
         <PanelRightOpen
           className={`w-6 h-6 cursor-pointer text-gray-600 hover:text-gray-900 ${
@@ -118,32 +128,30 @@ export default function Sidebar() {
         <NotebookPen className="w-5 h-5 ml-2" />
         {sidebarOpen && <span className="font-bold">새 대화</span>}
       </div>
-      <div
-        className="flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-200"
-        onClick={handleNewConversation}
-      >
-        <SearchCheck className="w-5 h-5 ml-2" />
-        {sidebarOpen && <span className="font-bold">검색 [구현x]</span>}
-      </div>
 
-      {/* 펼침 상태일 때만 목록 표시 */}
+      {/* 대화 목록 */}
       {sidebarOpen && (
         <div className="p-4 flex-1 overflow-y-auto">
-          <h2 className="text-lg font-semibold mb-4">대화</h2>
+          <h2 className="font-semibold mb-4 text-xl">대화 목록</h2>
           <ul className="space-y-2">
             {conversations.map((conv) => (
               <li
                 key={conv.id}
-                className="p-2 border-none flex justify-between items-center hover:bg-gray-200 group relative"
+                onClick={() =>
+                  editingId ? null : handleSelectConversation(conv.id)
+                }
+                className={`p-2 border-none flex justify-between items-center group relative cursor-pointer rounded
+                  ${
+                    conv.id === conversationId
+                      ? "bg-gray-300" // ✅ 선택된 대화 강조 (배경색)
+                      : "hover:bg-gray-200"
+                  }`}
               >
                 {/* 제목 or 수정 input */}
-                <div
-                  className="flex-1 cursor-pointer"
-                  onClick={() => (editingId ? null : handleSelectConversation(conv.id))}
-                >
+                <div className="flex-1">
                   {editingId === conv.id ? (
                     <input
-                      ref={inputRef} // ✅ ref 연결
+                      ref={inputRef}
                       type="text"
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
@@ -155,23 +163,32 @@ export default function Sidebar() {
                     />
                   ) : (
                     <>
-                      <p className="font-semibold text-gray-900">{conv.title || "제목 없음"}</p>
+                      <p className="font-semibold text-gray-900">
+                        {conv.title || "제목 없음"}
+                      </p>
                       <p className="text-xs text-gray-500">
-                        {new Date(conv.created_at || "").toLocaleString()}
+                        {new Date(conv.created_at || "").toLocaleString("ko-KR", {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          // second 안 넣으면 자동으로 안 나옴 ✅
+                        })}
                       </p>
                     </>
                   )}
                 </div>
 
-                {/* ⋯ 아이콘 */}
+                {/* ⋯ 메뉴 버튼 */}
                 <div
                   className="px-2 hidden group-hover:block text-gray-500 hover:text-gray-700 cursor-pointer select-none"
                   role="button"
                   tabIndex={0}
-                  onClick={() => setMenuOpen(menuOpen === conv.id ? null : conv.id)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && setMenuOpen(menuOpen === conv.id ? null : conv.id)
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation(); // ✅ 부모 클릭 막기
+                    setMenuOpen(menuOpen === conv.id ? null : conv.id);
+                  }}
                 >
                   ⋯
                 </div>

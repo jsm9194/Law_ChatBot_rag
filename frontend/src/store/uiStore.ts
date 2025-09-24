@@ -8,7 +8,10 @@ interface UIState {
   toggleSidebar: () => void;
   toggleSourcePanel: () => void;
   toggleTheme: () => void;
-  setResponsiveLayout: (width: number) => void; // ✅ 추가
+  setResponsiveLayout: (width: number) => void;
+  setSourceUrl: (url: string | null) => void;
+  openSource: (url: string) => void;
+  sourceUrl: string | null;
 }
 
 export const useUIStore = create<UIState>()(
@@ -16,19 +19,21 @@ export const useUIStore = create<UIState>()(
     (set) => ({
       sidebarOpen: true,
       sourcePanelOpen: false,
+      sourceUrl: null,
       theme: "light",
 
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleSourcePanel: () => set((s) => ({ sourcePanelOpen: !s.sourcePanelOpen })),
-      toggleTheme: () =>
-        set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-      setResponsiveLayout: (width) => {                // ✅ 구현
+      setSourceUrl: (url) => set({ sourceUrl: url }),
+      openSource: (url) => set({ sourcePanelOpen: true, sourceUrl: url }),
+      toggleTheme: () => set((s: UIState) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+      setResponsiveLayout: (width: number) => {        // ✅ 구현
         if (width < 768) {
           set({ sidebarOpen: false, sourcePanelOpen: false });
         } else {
           set({ sidebarOpen: true });
         }
-      },
+      }
     }),
     { name: "ui-storage" }
   )

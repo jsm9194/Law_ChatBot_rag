@@ -1,6 +1,8 @@
-import requests
-import xml.etree.ElementTree as ET
 import os
+import re
+import xml.etree.ElementTree as ET
+import requests
+from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 import dotenv
 from utils.safe_request import safe_request
@@ -15,7 +17,7 @@ DETAIL_URL = "http://www.law.go.kr/DRF/lawService.do"
 def search_case_list(
     query: str,
     count: int = 5,
-    search: int = 2,  # 본문 검색 (1: 사건명 검색)
+    search: int = 2,  # 기본: 본문 검색 (1=사건명/번호 검색)
     curt: Optional[str] = None,
     org: Optional[str] = None,
     nb: Optional[str] = None,
@@ -25,6 +27,11 @@ def search_case_list(
     display: int = 20
 ) -> List[Dict]:
     """판례 목록 검색 (XML 기반)"""
+
+    # ✅ 사건번호 패턴 자동 인식 → 사건번호 검색 모드로
+    if re.match(r"\d{2,4}[가-힣]+\d+", query):
+        search = 1
+
     params = {
         "OC": LAW_OC_ID,
         "target": "prec",
@@ -42,13 +49,13 @@ def search_case_list(
 
     resp = safe_request(SEARCH_URL, params)
     if isinstance(resp, dict) and "error" in resp:
-        return [resp]  # 에러 발생 시 리스트 형태로 반환 (호출부에서 에러 메시지 처리 가능)
+        return [resp]
 
     try:
         resp.encoding = "utf-8"
         root = ET.fromstring(resp.text)
     except ET.ParseError as e:
-        return {"error": f"XML 파싱 실패: {e}"}
+        return [{"error": f"XML 파싱 실패: {e}"}]
 
     cases = []
     for item in root.findall("prec")[:count]:
@@ -58,7 +65,7 @@ def search_case_list(
         선고일자 = item.findtext("선고일자")
         법원명 = item.findtext("법원명")
 
-        # 출처 링크 생성 (HTML 보기)
+        # 출처 링크 (HTML 보기)
         link = f"{DETAIL_URL}?OC={LAW_OC_ID}&target=prec&ID={case_id}&type=HTML"
 
         cases.append({
@@ -72,56 +79,52 @@ def search_case_list(
     return cases
 
 
-def get_case_detail(case_id: str) -> Dict:
+def get_case_detail(case_id: str) -> dict:
+    """판례 상세 조회 (JSON → HTML fallback)"""
+    # 1. JSON 요청 먼저 시도
     url = "http://www.law.go.kr/DRF/lawService.do"
-    params = {
-        "OC": LAW_OC_ID,
-        "target": "prec",
-        "ID": case_id,
-        "type": "JSON"
-    }
-
-    resp = safe_request(url, params)
-    if isinstance(resp, dict) and "error" in resp:
-        return resp  # API 호출 자체가 실패했을 때 그대로 반환
+    params = {"OC": LAW_OC_ID, "target": "prec", "ID": case_id, "type": "JSON"}
+    resp = requests.get(url, params=params)
 
     try:
-        resp.encoding = "utf-8"
         data = resp.json()
-    except Exception as e:
-        return {"error": f"JSON 파싱 실패: {e}", "raw": resp.text[:300]}
+        if "Prec" in data:
+            item = data["Prec"]
+            return {
+                "판례명": item.get("사건명"),
+                "사건번호": item.get("사건번호"),
+                "선고일자": item.get("선고일자"),
+                "법원명": item.get("법원명"),
+                "판시사항": item.get("판시사항"),
+                "판결요지": item.get("판결요지"),
+                "판례전문": item.get("판례내용"),
+            }
+    except Exception:
+        pass  # JSON 실패 → HTML 파싱 시도
 
-    # Prec 키 확인
-    item = data.get("Prec")
-    if not item:
-        return {"error": "판례 본문을 찾을 수 없음", "raw": data}
+    # 2. HTML fallback
+    html_url = f"http://www.law.go.kr/LSW/precInfoP.do?precSeq={case_id}&mode=0"
+    iframe_url = f"http://www.law.go.kr/LSW/precInfoR.do?precSeq={case_id}&mode=0"
+    iframe_resp = requests.get(iframe_url)
+    iframe_resp.encoding = iframe_resp.apparent_encoding
+    iframe_soup = BeautifulSoup(iframe_resp.text, "html.parser")
 
-    import re
-    def clean_html(text: str) -> str:
-        if not text:
-            return None
-        return re.sub(r"<br\s*/?>", "\n", text).strip()
-
+    text = iframe_soup.get_text("\n", strip=True).replace("\xa0", " ")
     return {
-        "판례명": item.get("사건명"),
-        "사건번호": item.get("사건번호"),
-        "선고일자": item.get("선고일자"),
-        "법원명": item.get("법원명"),
-        "판시사항": clean_html(item.get("판시사항")),
-        "참조조문": item.get("참조조문"),
-        "참조판례": item.get("참조판례"),
-        "판결요지": clean_html(item.get("판결요지")),
-        "판례전문": clean_html(item.get("판례내용")),
+        "판례명": f"precSeq={case_id}",
+        "판례전문": text,
+        "출처링크": html_url,
     }
+
 
 
 # ================================
-# 테스트 코드 (직접 실행 시)
+# 테스트 코드
 # ================================
 if __name__ == "__main__":
     print("LAW_OC_ID =", LAW_OC_ID)
 
-    results = search_case_list("중대재해처벌법", count=2)
+    results = search_case_list("94누5496", count=3)
     print("\n[검색 결과]")
     for r in results:
         print(r)

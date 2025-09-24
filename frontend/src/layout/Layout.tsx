@@ -1,5 +1,4 @@
-// src/layout/Layout.tsx
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatArea from "../components/ChatArea";
 import SourcePanel from "../components/SourcePanel";
@@ -37,7 +36,7 @@ export default function Layout() {
         {conversationId ? (
           <ChatArea />
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="flex items-center justify-center h-full text-gray-400 min-w-[40rem]" >
             대화를 선택하거나 새 대화를 시작하세요.
           </div>
         )}
@@ -45,7 +44,7 @@ export default function Layout() {
 
       {/* 우측 출처 패널 */}
       <motion.div
-        animate={{ width: sourcePanelOpen ? 384 : 48 }}
+        animate={{ width: sourcePanelOpen ? 600 : 0 }}
         transition={{ duration: 0.3 }}
         className="border-l border-gray-300 bg-white hidden lg:block"
       >
