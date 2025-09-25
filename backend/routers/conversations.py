@@ -27,16 +27,10 @@ def create_conversation(req: ConversationCreate, db: Session = Depends(get_db)):
     return {"conversation_id": conv.id, "title": conv.title}
 
 
-@router.get("/conversation/{conversation_id}")
-def get_logs(
-    conversation_id: str,
-    offset: int = 0,
-    limit: int = 20,
-    db: Session = Depends(get_db)
-):
-    logs = crud.get_conversation_logs(db, conversation_id, offset=offset, limit=limit)
-    return logs
-
+@router.get("/conversations/{user_id}")
+def get_conversations(user_id: str, db: Session = Depends(get_db)):
+    convs = crud.get_conversations(db, user_id)
+    return [{"id": c.id, "title": c.title, "created_at": c.created_at} for c in convs]
 
 
 # ✅ 대화 제목 변경

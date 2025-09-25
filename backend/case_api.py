@@ -80,8 +80,21 @@ def search_case_list(
 
 
 def get_case_detail(case_id: str) -> dict:
-    """판례 상세 조회 (JSON → HTML fallback)"""
-    # 1. JSON 요청 먼저 시도
+    """
+    판례 상세 조회
+    - 입력: 사건번호(예: 2023다238486) 또는 판례일련번호(예: 347830)
+    - 처리: 사건번호면 search_case_list()로 판례일련번호를 먼저 조회
+    - 출력: 판례 상세 JSON (판시사항, 판결요지, 판례전문 등)
+    """
+    # 사건번호(한글+숫자 조합) → 판례일련번호 변환
+    if not case_id.isdigit():
+        results = search_case_list(query="", nb=case_id, count=1, search=1)
+        if results and "사건ID" in results[0]:
+            case_id = results[0]["사건ID"]
+        else:
+            return {"error": f"사건번호 '{case_id}'에 해당하는 판례를 찾을 수 없습니다."}
+
+    # 1. JSON 요청
     url = "http://www.law.go.kr/DRF/lawService.do"
     params = {"OC": LAW_OC_ID, "target": "prec", "ID": case_id, "type": "JSON"}
     resp = requests.get(url, params=params)
@@ -98,23 +111,25 @@ def get_case_detail(case_id: str) -> dict:
                 "판시사항": item.get("판시사항"),
                 "판결요지": item.get("판결요지"),
                 "판례전문": item.get("판례내용"),
+                "출처링크": f"http://www.law.go.kr/DRF/lawService.do?OC={LAW_OC_ID}&target=prec&ID={case_id}&type=HTML"
             }
     except Exception:
-        pass  # JSON 실패 → HTML 파싱 시도
+        pass
 
-    # 2. HTML fallback
+    # 2. JSON 실패 시 HTML fallback
     html_url = f"http://www.law.go.kr/LSW/precInfoP.do?precSeq={case_id}&mode=0"
     iframe_url = f"http://www.law.go.kr/LSW/precInfoR.do?precSeq={case_id}&mode=0"
     iframe_resp = requests.get(iframe_url)
     iframe_resp.encoding = iframe_resp.apparent_encoding
     iframe_soup = BeautifulSoup(iframe_resp.text, "html.parser")
-
     text = iframe_soup.get_text("\n", strip=True).replace("\xa0", " ")
+
     return {
         "판례명": f"precSeq={case_id}",
         "판례전문": text,
         "출처링크": html_url,
     }
+
 
 
 

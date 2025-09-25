@@ -6,7 +6,6 @@ import {
   NotebookPen,
   PanelRightClose,
   PanelRightOpen,
-  SearchCheck,
 } from "lucide-react";
 
 export default function Sidebar() {
