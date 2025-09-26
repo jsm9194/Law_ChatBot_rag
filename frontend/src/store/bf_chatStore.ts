@@ -52,7 +52,7 @@ function handleAxiosError(err: unknown): string {
 
 export const useChatStore = create<ChatState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       conversations: [],
       conversationId: null,
       messages: [],
@@ -109,7 +109,7 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // 특정 대화 메시지 불러오기
+      // 특정 대화 메시지 불러오기 (✅ 레이지 로딩 적용)
       loadMessages: async (conversationId, offset = 0, limit = 20) => {
         set({ isLoading: true, error: null });
         try {
@@ -121,8 +121,8 @@ export const useChatStore = create<ChatState>()(
             conversationId,
             messages:
               offset === 0
-                ? res.data
-                : [...res.data, ...state.messages],
+                ? res.data // ✅ 첫 로딩은 새로 세팅
+                : [...res.data, ...state.messages], // ✅ 스크롤 로딩은 앞에 붙이기
           }));
         } catch (err: unknown) {
           set({ error: handleAxiosError(err) });
@@ -131,12 +131,10 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // 메시지 보내기 (스트리밍 적용)
+      // 메시지 보내기
       sendMessage: async (conversationId, userId, content) => {
         set({ isLoading: true, error: null });
-
         try {
-          // 1. 유저 메시지 추가
           const userMsg: Message = { role: "user", content };
           set((state) => ({ messages: [...state.messages, userMsg] }));
 
@@ -147,62 +145,24 @@ export const useChatStore = create<ChatState>()(
             content,
           });
 
-          // 2. 어시스턴트 placeholder 추가
-          let assistantIndex: number;
-          set((state) => {
-            assistantIndex = state.messages.length; // 유저 메시지 뒤
-            return {
-              messages: [...state.messages, { role: "assistant", content: "" }],
-            };
-          });
-
-          // 3. 스트리밍 요청
-          const res = await fetch("http://localhost:8000/ask_stream", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ conversation_id: conversationId, question: content }),
-          });
-
-          const reader = res.body?.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          while (true) {
-            const { done, value } = await reader!.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-
-            const parts = buffer.split("\n");
-            buffer = parts.pop() || "";
-
-            for (const part of parts) {
-              if (!part.trim()) continue;
-              const data = JSON.parse(part);
-
-              if (data.type === "content") {
-                // ✅ 토큰 단위로 답변 이어붙이기
-                set((state) => {
-                  const updated = [...state.messages];
-                  updated[assistantIndex!] = {
-                    role: "assistant",
-                    content: (updated[assistantIndex!].content || "") + data.delta,
-                  };
-                  return { messages: updated };
-                });
-              } else if (data.type === "sources") {
-                // ✅ 출처 데이터 별도 관리 가능 (state에 sources 추가하면 좋음)
-                console.log("출처:", data.data);
-              }
+          const res = await axios.post<{ answer: string }>(
+            "http://localhost:8000/ask",
+            {
+              conversation_id: conversationId,
+              question: content,
             }
-          }
+          );
 
-          // 4. 최종 어시스턴트 메시지를 DB에 저장
-          const finalMsg = get().messages[assistantIndex!];
+          const answer = res.data.answer;
+          const assistantMsg: Message = { role: "assistant", content: answer };
+
+          set((state) => ({ messages: [...state.messages, assistantMsg] }));
+
           await axios.post("http://localhost:8000/message", {
             conversation_id: conversationId,
             user_id: "bot",
             role: "assistant",
-            content: finalMsg.content,
+            content: answer,
           });
         } catch (err: unknown) {
           set({ error: handleAxiosError(err) });

@@ -32,8 +32,16 @@ body {
   min-height: 100vh;
 }
 
+@font-face {
+  font-family: 'Tossface';
+  src: url('/fonts/TossFaceFont.woff2') format('woff2'),
+       url('/fonts/TossFaceFont.ttf') format('truetype');
+  font-display: swap;
+}
+
 html, body {
   @apply font-sans text-base text-gray-800;
+  font-family: 'Tossface', sans-serif;
 }
 
 html, body, #root {

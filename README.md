@@ -89,9 +89,9 @@ uvicorn main:app --reload
 
 - ✅ UI 기본 레이아웃 (ChatGPT 스타일)
 - ✅ TailwindCSS v4 세팅
-- ⬜ FastAPI ↔ React API 연동
-- ⬜ Qdrant 연동 (벡터 검색)
-- ⬜ 판례 검색 API 적용
+- ✅ FastAPI ↔ React API 연동
+- ✅ Qdrant 연동 (벡터 검색)
+- ✅ 판례 검색 API 적용
 - ⬜ 법령/판례 하이라이트 표시 기능
 
 ---
@@ -292,8 +292,9 @@ query_qdrant.py >> 예외처리 코드 추가
 
 </details>
 
-# 일정
+# 예정
 
+- 경량 라우팅모델로 속도/비용 개선, 수백개의 프롬프트 라우터로 답변퀄리티 업그레이드
 - 툴콜링 모델선택 메시지 출력 & 스트림 형식으로 최종답변 생성
 - 우측 출처 패널 마우스 리사이징기능
 - 요청보낼때 어떤 툴콜링 사용중인지 표기
