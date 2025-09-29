@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost:8000";
+export const BASE_URL = "http://localhost:8000";
 
 export async function createConversation(userId: string) {
   const res = await fetch(`${BASE_URL}/conversation/new`, {
