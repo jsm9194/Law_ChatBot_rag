@@ -76,8 +76,8 @@ tools = [
                     },
                     "count": {
                         "type": "integer",
-                        "default": 5,
-                        "description": "가져올 검색 결과 개수 (최대 10)"
+                        "default": 20,
+                        "description": "가져올 검색 결과 개수 (최대 100)"
                     },
                     "time_range": {
                         "type": "string",

@@ -33,6 +33,7 @@ export default function ChatArea() {
     setDraft(conversationId, "");
     scrollToBottom();
   };
+  
 
   // textarea 자동 높이
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function ChatArea() {
                   {msg.content}
                 </div>
               ) : (
-                <div className="text-lg leading-8 max-w-none text-gray-800">
+                <div className="prose prose-lg max-w-none text-gray-800">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -160,12 +161,17 @@ export default function ChatArea() {
             value={draft}
             onChange={(e) => setDraft(conversationId!, e.target.value)}
             onKeyDown={(e) => {
-              if (isLoading) return;
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
+                if (isLoading) return;
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+
+                  // 메시지가 추가된 뒤 DOM 업데이트 완료 후 스크롤
+                  setTimeout(() => {
+                    scrollToBottom();
+                  }, 0);
+                }
+              }}
             placeholder="메시지를 입력하세요..."
             disabled={isLoading}
             className="flex-1 resize-none bg-transparent text-lg focus:outline-none leading-snug py-2 ml-2"
@@ -177,7 +183,14 @@ export default function ChatArea() {
             </div>
           ) : (
             <div
-              onClick={!isLoading ? handleSend : undefined}
+              onClick={() => {
+                if (!isLoading) {
+                  handleSend();
+                  setTimeout(() => {
+                    scrollToBottom();
+                  }, 0);
+                }
+              }}
               className="p-2 rounded-full bg-black text-white cursor-pointer hover:opacity-90 transition"
             >
               <CircleFadingArrowUp className="w-5 h-5" />
