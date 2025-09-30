@@ -152,10 +152,19 @@ export function askStream(
 
           if (raw) {
             const lines = raw.split("\n");
-            const evLine = lines.find((l) => l.startsWith("event:"));
-            const dataLine = lines.find((l) => l.startsWith("data:"));
-            const ev = evLine ? evLine.slice(6).trim() : "message";
-            const dataText = dataLine ? dataLine.slice(5) : "";
+            let ev = "message";
+            const dataChunks: string[] = [];
+
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                ev = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                const chunk = line.slice(5);
+                dataChunks.push(chunk.startsWith(" ") ? chunk.slice(1) : chunk);
+              }
+            }
+
+            const dataText = dataChunks.join("\n");
 
             if (ev === "chunk") {
               nChunk++;
