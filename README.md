@@ -81,6 +81,8 @@ cd backend
 uvicorn main:app --reload
 ```
 
+** 도커도 켜줘야함!! **
+
 👉 기본 실행 주소: [http://localhost:8000](http://localhost:8000)
 
 ---
