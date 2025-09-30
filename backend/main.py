@@ -33,6 +33,8 @@ app.include_router(messages.router)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+VALID_MESSAGE_ROLES = {"system", "assistant", "user", "tool", "function", "developer"}
+
 # ===============================
 # CORS
 # ===============================
@@ -299,9 +301,25 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
         .all()
     )
     # 로그를 뒤집어서 시간 순서대로 정렬
-    history_messages = [
-        {"role": log.role, "content": log.content} for log in reversed(logs)
-    ]
+    history_messages: List[Dict[str, str]] = []
+    for log in reversed(logs):
+        normalized_role = (log.role or "").strip().lower()
+        if normalized_role not in VALID_MESSAGE_ROLES:
+            print(
+                "  ⚠️ 대화 로그 무시 (유효하지 않은 role)",
+                {"id": getattr(log, "id", None), "role": log.role},
+            )
+            continue
+
+        content = log.content or ""
+        if not content.strip():
+            print(
+                "  ⚠️ 대화 로그 무시 (빈 content)",
+                {"id": getattr(log, "id", None)},
+            )
+            continue
+
+        history_messages.append({"role": normalized_role, "content": content})
     
     # 히스토리 텍스트 출력 (디버깅용)
     print("  === 과거 대화 로그 ===")

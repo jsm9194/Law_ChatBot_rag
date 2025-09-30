@@ -33,6 +33,7 @@ interface ChatState {
   loadConversations: (userId: string) => Promise<void>;
   loadMessages: (conversationId: string, offset?: number, limit?: number) => Promise<void>;
   sendMessage: (conversationId: string, userId: string, content: string) => Promise<void>;
+  addMessage: (message: Message) => void;
 }
 
 // ✅ 공통 에러 핸들러
@@ -63,6 +64,11 @@ export const useChatStore = create<ChatState>()(
       setDraft: (conversationId, val) =>
         set((state) => ({
           drafts: { ...state.drafts, [conversationId]: val },
+        })),
+
+      addMessage: (message) =>
+        set((state) => ({
+          messages: [...state.messages, message],
         })),
 
       setConversationId: (id) => set({ conversationId: id }),
