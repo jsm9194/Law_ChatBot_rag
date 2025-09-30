@@ -109,22 +109,26 @@ export default function ChatArea() {
         onDone: async (meta) => {
           if (streamFinalizedRef.current) return;
 
-          // partial(중단/에러) 응답은 저장하지 않음
-          if (meta?.partial) {
-            setStreaming(false);
-            return;
-          }
-
           streamFinalizedRef.current = true;
           setStreaming(false);
 
           const finalText = streamTextRef.current.trim();
+          const isPartial = Boolean(meta?.partial);
+
           if (finalText) {
             addMessage({ role: "assistant", content: finalText });
-            await saveMessage(conversationId, userId, "assistant", finalText);
+
+            if (!isPartial) {
+              try {
+                await saveMessage(conversationId, userId, "assistant", finalText);
+              } catch (err) {
+                console.error("assistant message save failed", err);
+              }
+            }
           }
 
           setStreamText("");
+          streamTextRef.current = "";
           setStreamSources(null);
           setStreamPrep(null);
           scrollToBottom();
