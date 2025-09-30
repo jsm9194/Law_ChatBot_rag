@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import { useChatStore } from "../store/chatStore";
 import { ShieldEllipsis, CircleFadingArrowUp, Aperture, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -48,6 +48,42 @@ export default function ChatArea() {
   const userId = "test-user";
 
   const [inputBoxHeight, setInputBoxHeight] = useState(80);
+
+  const markdownComponents = {
+    a: ({
+      href,
+      children,
+      onClick,
+      ...anchorProps
+    }: ComponentPropsWithoutRef<"a">) => {
+      if (!href) {
+        return <span {...anchorProps}>{children}</span>;
+      }
+
+      const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+          return;
+        }
+        event.preventDefault();
+        openSource(href);
+      };
+
+      return (
+        <a
+          {...anchorProps}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleClick}
+          className="inline-flex items-center gap-1 px-2 py-1 my-1 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-sm hover:bg-blue-100 hover:border-blue-400 transition-colors"
+        >
+          {children}
+        </a>
+      );
+    },
+  } satisfies Parameters<typeof ReactMarkdown>[0]["components"];
 
   /* 👇 스트림 상태(에페메랄) */
   const [streaming, setStreaming] = useState(false);
@@ -214,16 +250,7 @@ export default function ChatArea() {
                   <div className="prose prose-lg max-w-none text-gray-800">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({ href, children }) => (
-                          <span
-                            onClick={() => href && openSource(href)}
-                            className="inline-block my-1 p-2 rounded-lg border border-gray-200 bg-gray-200 text-gray-700 text-sm hover:bg-gray-300 hover:border-blue-400 hover:text-blue-600 cursor-pointer transition"
-                          >
-                            {children}
-                          </span>
-                        ),
-                      }}
+                      components={markdownComponents}
                     >
                       {msg.content}
                     </ReactMarkdown>
@@ -241,16 +268,7 @@ export default function ChatArea() {
                   )}
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
-                    components={{
-                      a: ({ href, children }) => (
-                        <span
-                          onClick={() => href && openSource(href)}
-                          className="inline-block my-1 p-2 rounded-lg border border-gray-200 bg-gray-200 text-gray-700 text-sm hover:bg-gray-300 hover:border-blue-400 hover:text-blue-600 cursor-pointer transition"
-                        >
-                          {children}
-                        </span>
-                      ),
-                    }}
+                    components={markdownComponents}
                   >
                     {streamText || " "}
                   </ReactMarkdown>
