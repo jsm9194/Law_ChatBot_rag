@@ -21,7 +21,16 @@ type Source = {
 const USE_STREAMING = true; // 필요 시 false로 바꾸면 논-스트림 경로 사용
 
 export default function ChatArea() {
-  const { messages, isLoading, error, sendMessage, conversationId, drafts, setDraft } =
+  const {
+    messages,
+    isLoading,
+    error,
+    sendMessage,
+    conversationId,
+    drafts,
+    setDraft,
+    addMessage,
+  } =
     useChatStore();
   const draft = conversationId ? drafts[conversationId] || "" : "";
 
@@ -46,7 +55,9 @@ export default function ChatArea() {
   // ❗ any 제거: 명시적 Source 타입 사용
   const [streamSources, setStreamSources] = useState<Source[] | null>(null);
   const [streamText, setStreamText] = useState("");
+  const streamTextRef = useRef("");
   const streamAbortRef = useRef<{ abort: () => void } | null>(null);
+  const streamFinalizedRef = useRef(false);
 
   // 전송
   const handleSend = async () => {
@@ -67,9 +78,12 @@ export default function ChatArea() {
       setStreamPrep(null);
       setStreamSources(null);
       setStreamText("");
+      streamTextRef.current = "";
+      streamFinalizedRef.current = false;
 
       // 사용자 메시지는 DB 저장(완성본만 저장 원칙에서 'assistant'만 저장해도 되지만,
       // 보통 user도 저장합니다. 필요 없으면 이 줄 삭제 가능)
+      addMessage({ role: "user", content: userText });
       await saveMessage(conversationId, userId, "user", userText);
 
       streamAbortRef.current = askStream(conversationId, userText, {
@@ -84,16 +98,35 @@ export default function ChatArea() {
           scrollToBottom();
         },
         onChunk: (delta) => {
-          setStreamText((prev) => prev + delta);
+          setStreamText((prev) => {
+            const next = prev + delta;
+            streamTextRef.current = next;
+            return next;
+          });
           scrollToBottom();
         },
         // ❗ 'meta' 미사용 경고 제거: 파라미터 삭제 (또는 _meta 로 변경)
-        onDone: async () => {
-          setStreaming(false);
-          if (streamText.trim()) {
-            // DB에는 'assistant' 완성본만 1회 저장
-            await saveMessage(conversationId, userId, "assistant", streamText);
+        onDone: async (meta) => {
+          if (streamFinalizedRef.current) return;
+
+          // partial(중단/에러) 응답은 저장하지 않음
+          if (meta?.partial) {
+            setStreaming(false);
+            return;
           }
+
+          streamFinalizedRef.current = true;
+          setStreaming(false);
+
+          const finalText = streamTextRef.current.trim();
+          if (finalText) {
+            addMessage({ role: "assistant", content: finalText });
+            await saveMessage(conversationId, userId, "assistant", finalText);
+          }
+
+          setStreamText("");
+          setStreamSources(null);
+          setStreamPrep(null);
           scrollToBottom();
         },
         onError: (err) => {
@@ -131,6 +164,10 @@ export default function ChatArea() {
       streamAbortRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    streamTextRef.current = streamText;
+  }, [streamText]);
 
   return (
     <div
