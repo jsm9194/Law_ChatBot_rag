@@ -73,13 +73,14 @@ def get_current_datetime() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
+
 # ===============================
 # 쿼리 최적화 프롬프트
 # ===============================
 QUERY_OPTIMIZATION_SYSTEM = """
 당신은 검색 쿼리 최적화 전문가입니다.  
 사용자의 자연어 질문을 받아, 구글 검색에서 최상의 결과를 얻을 수 있는 검색 쿼리 세트를 한국어와 영어로 변환해주세요.  
-현재 시각은 {current_datetime} 입니다.
+현재 2025년 10월 입니다.
 
 규칙:  
 1. 한국어 쿼리와 영어 쿼리를 모두 생성하세요.  
@@ -88,7 +89,7 @@ QUERY_OPTIMIZATION_SYSTEM = """
    - 위키/백과사전용 쿼리  
    - 해외 언론(Reuters, NYT, TIME 등)용 쿼리  
    - 기술/전문 자료용 쿼리  
-   - 최신 정보(최근/2024/올해 등 포함)  
+   - 최신 정보(최근/올해 등 포함)  
 3. 쿼리는 짧고 명확하게 (2~6 단어) 작성하세요.  
 4. 불필요한 조사/접속사는 제거하세요.  
 5. 결과는 JSON으로 출력하되 아래 형식을 따르세요.  
@@ -116,17 +117,19 @@ def optimize_search_query(question: str) -> List[str]:
         # JSON 파싱 시도
         try:
             queries = json.loads(result)
-            if isinstance(queries, list) and len(queries) > 0:
+            if isinstance(queries, dict) and "ko" in queries and "en" in queries:
                 return queries
+            
+            if isinstance(queries, list) and len(queries) > 0:
+                return {"ko": queries, "en": []}
         except:
             print(f"쿼리 최적화 결과 파싱 실패: {result}")
-            pass
             
     except Exception as e:
         print(f"쿼리 최적화 오류: {str(e)}")
     
     # 실패 시 원래 질문을 그대로 리턴
-    return [question]
+    return {"ko": [question], "en": []}
 
 # ===============================
 # 검색 결과 리랭킹 프롬프트
@@ -200,8 +203,11 @@ def enhanced_web_search(query: str, count: int = 8, time_range: str = "any"):
     print(f"  🔍 최적화된 쿼리: {optimized_queries}")
     
     all_results = []
+
+    merged_queries = optimized_queries.get("ko", []) + optimized_queries.get("en", [])
+
     # 2. 각 최적화된 쿼리로 검색 실행
-    for opt_query in optimized_queries[:2]:  # 상위 2개 쿼리만 사용
+    for opt_query in merged_queries:  # ✅ 이제 여기서 슬라이싱 에러 안 남
         results = google_search(opt_query, count, time_range)
         if isinstance(results, list):
             all_results.extend(results)
@@ -272,17 +278,26 @@ def _sse(event: str, data: Any) -> str:
 # ===============================
 # 유틸: 팔로업 메시지 구성
 # ===============================
-FOLLOWUP_SYSTEM = """당신은 전문 분석 어시스턴트입니다.
-당신의 임무는 (있다면) 툴(web_search, 법령검색, 판례검색 등)에서 전달된 결과를 바탕으로 사용자의 질문에 최종 답변을 작성하는 것입니다.
+FOLLOWUP_SYSTEM = """
+당신은 전문 분석 어시스턴트입니다.  
+아래 규칙을 반드시 따라 최종 답변을 작성하세요.
 
-⚡️ 출력 규칙 (엄격히 지켜야 함)
-1. **마크다운 형식**만 사용 (HTML 태그 금지)
-2. 문단 간 두 줄 간격 유지
-3. 제목/소제목은 `##`, `###`를 상황에 맞게 사용
-4. 핵심은 불릿포인트(`-`), 단계/타임라인은 번호 리스트(`1.`)
-5. 기사·문서·출처는 요약 옆에 `[출처명](URL)`로 바로 링크
-6. 출처가 여러 개면 동일 주제 아래에 나란히 연결 (예: `👉 [연합뉴스](url) | [한겨레](url)`)
-7. 불필요한 사족 금지. 데이터 없으면 `관련 자료 없음` 한 줄로.
+⚡ 출력 규칙 (엄격히 지켜야 함)
+1. 반드시 **Markdown 형식**만 사용 (HTML, 버튼, 이모지, '출처', '바로가기' 같은 표현 금지).
+2. 답변은 항상 두 섹션으로 작성:
+   ## 관련 법률 요약
+   - **법령명 (제XX조)**  
+     설명 한 줄  
+     [출처](URL)
+
+   - 동일 법령의 여러 조문도 위와 같이 각각 불릿·줄바꿈
+3. ## 사업장 안전관리 핵심 조치  
+   1. 번호 리스트로 작성  
+   2. 각 항목은 짧은 문장으로 기술  
+   3. 항목 사이 반드시 줄바꿈 유지
+4. 링크는 반드시 `[출처](URL)` 형식으로만 표시.  
+   다른 표현(예: '출처:', '바로가기', URL 단독)은 절대 금지.
+5. 문단·불릿·번호 리스트 사이에는 빈 줄 한 줄 반드시 넣을 것.
 """
 
 def build_followup_messages(
@@ -358,7 +373,10 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     messages_for_tool_call = history_messages + [
         {
             "role": "system",
-            "content": "당신은 사용자의 질문에 답하기 위해 필요한 도구를 선택하는 전문가입니다. 다음 도구들 중에서 적절한 것을 선택하세요. 과거 대화 맥락을 이해하고 도구 사용을 결정하세요.",
+            "content": 
+            """당신은 사용자의 질문에 답하기 위해 필요한 도구를 선택하는 전문가입니다.  
+필요하다면 여러 개의 도구를 동시에 호출할 수도 있습니다.  
+불필요한 도구는 호출하지 마세요.""",
         },
         {"role": "user", "content": query.question},
     ]

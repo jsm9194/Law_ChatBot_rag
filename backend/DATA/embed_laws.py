@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+import time
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, VectorParams
@@ -17,6 +18,8 @@ qdrant = QdrantClient(host="localhost", port=6333)
 
 COLLECTION_NAME = "laws"
 DIM = 3072  # text-embedding-3-large 차원 수
+BATCH_SIZE = 100  # 임베딩 배치 크기
+MAX_RETRIES = 3   # 재시도 횟수
 
 # --------------------------
 # Qdrant 컬렉션 초기화
@@ -41,18 +44,20 @@ def hash_id(law_name: str, article_key: str, text: str) -> str:
     raw = law_name + article_key + text
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
-def get_embeddings(texts: list[str]) -> list[list[float]]:
-    """OpenAI API로 배치 임베딩 생성 (실제 벡터 길이 출력)"""
-    response = client.embeddings.create(
-        model="text-embedding-3-large",
-        input=texts
-    )
-    embeddings = []
-    for i, d in enumerate(response.data):
-        emb = d.embedding
-        print(f"⚡ 임베딩 길이: {len(emb)} (텍스트 예시: {texts[i][:30]!r})")
-        embeddings.append(emb)
-    return embeddings
+def get_embeddings_with_retry(texts: list[str]) -> list[list[float]]:
+    """OpenAI API 임베딩 요청 (재시도 포함)"""
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.embeddings.create(
+                model="text-embedding-3-large",
+                input=texts
+            )
+            embeddings = [d.embedding for d in response.data]
+            return embeddings
+        except Exception as e:
+            print(f"❌ 임베딩 요청 실패 (시도 {attempt+1}/{MAX_RETRIES}): {e}")
+            time.sleep(2 ** attempt)  # 지수 백오프
+    raise RuntimeError("임베딩 생성 실패 (재시도 초과)")
 
 # --------------------------
 # 메인 로직
@@ -83,34 +88,34 @@ def main():
             if not chunks:
                 continue
 
-            # ✅ 배치로 임베딩 생성
-            embeddings = get_embeddings(chunks)
+            # ✅ 배치 단위로 임베딩 생성
+            for i in range(0, len(chunks), BATCH_SIZE):
+                batch = chunks[i:i+BATCH_SIZE]
+                embeddings = get_embeddings_with_retry(batch)
 
-            points = []
-            for chunk, emb in zip(chunks, embeddings):
-                if len(emb) != DIM:
-                    raise ValueError(
-                        f"❌ 벡터 차원 불일치: expected {DIM}, got {len(emb)} "
-                        f"(텍스트 앞부분: {chunk[:50]!r})"
-                    )
+                points = []
+                for chunk, emb in zip(batch, embeddings):
+                    if len(emb) != DIM:
+                        raise ValueError(
+                            f"❌ 벡터 차원 불일치: expected {DIM}, got {len(emb)} "
+                            f"(텍스트 앞부분: {chunk[:50]!r})"
+                        )
 
-                point_id = hash_id(law_name, article_key, chunk)
+                    point_id = hash_id(law_name, article_key, chunk)
+                    payload = {
+                        "law_name": law_name,
+                        "article_number": article_number,
+                        "article_title": article_title,
+                        "article_key": article_key,
+                        "text": chunk,
+                        "amendments": article.get("amendments", []),
+                        "all_change_dates": article.get("all_change_dates", []),
+                    }
+                    points.append(PointStruct(id=point_id, vector=emb, payload=payload))
 
-                payload = {
-                    "law_name": law_name,
-                    "article_number": article_number,
-                    "article_title": article_title,
-                    "article_key": article_key,
-                    "text": chunk,
-                    "amendments": article.get("amendments", []),
-                    "all_change_dates": article.get("all_change_dates", []),
-                }
-
-                points.append(PointStruct(id=point_id, vector=emb, payload=payload))
-
-            # ✅ upsert 실행
-            if points:
-                qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+                # ✅ upsert 실행
+                if points:
+                    qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 
         print(f"✅ {fname} 임베딩 및 Qdrant 적재 완료")
 
