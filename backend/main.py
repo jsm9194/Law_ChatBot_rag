@@ -23,6 +23,7 @@ from search_goolge import google_search
 
 # 툴 정의 불러오기 (Chat Completions용 function-calling 스키마)
 from tools_config import tools
+from prompts import load_prompt_text, select_followup_prompt
 
 # 쿼리에 날짜
 from datetime import datetime
@@ -77,29 +78,7 @@ def get_current_datetime() -> str:
 # ===============================
 # 쿼리 최적화 프롬프트
 # ===============================
-QUERY_OPTIMIZATION_SYSTEM = """
-당신은 검색 쿼리 최적화 전문가입니다.  
-사용자의 자연어 질문을 받아, 구글 검색에서 최상의 결과를 얻을 수 있는 검색 쿼리 세트를 한국어와 영어로 변환해주세요.  
-현재 2025년 10월 입니다.
-
-규칙:  
-1. 한국어 쿼리와 영어 쿼리를 모두 생성하세요.  
-2. 각 언어별로 최소 5개 이상의 쿼리를 만들어주세요.  
-   - 뉴스/시사 관련 쿼리  
-   - 위키/백과사전용 쿼리  
-   - 해외 언론(Reuters, NYT, TIME 등)용 쿼리  
-   - 기술/전문 자료용 쿼리  
-   - 최신 정보(최근/올해 등 포함)  
-3. 쿼리는 짧고 명확하게 (2~6 단어) 작성하세요.  
-4. 불필요한 조사/접속사는 제거하세요.  
-5. 결과는 JSON으로 출력하되 아래 형식을 따르세요.  
-
-출력 형식 (예시):
-{
-  "ko": ["카카오톡 롤백", "카카오톡 업데이트 논란", "카카오톡 피드백", "카카오톡 최근 뉴스", "카카오톡 사용자 반발"],
-  "en": ["KakaoTalk rollback", "KakaoTalk update controversy", "KakaoTalk user backlash", "KakaoTalk latest news", "KakaoTalk criticism Reuters"]
-}
-"""
+QUERY_OPTIMIZATION_SYSTEM = load_prompt_text("query_optimization.md")
 
 def optimize_search_query(question: str) -> List[str]:
     """사용자 질문을 검색에 최적화된 쿼리로 변환"""
@@ -134,22 +113,8 @@ def optimize_search_query(question: str) -> List[str]:
 # ===============================
 # 검색 결과 리랭킹 프롬프트
 # ===============================
-SEARCH_RERANKING_SYSTEM = """
-당신은 검색 결과 평가 전문가입니다.  
-사용자의 질문(한국어일 수도 있고 영어일 수도 있음)과 검색 결과 목록(한국어와 영어가 섞여 있을 수 있음)을 받아, 질문과 가장 관련성 높은 결과들을 선별하세요.  
-
-규칙:  
-1. 질문이 한국어라도 영어 결과를 무시하지 마세요. 제목/스니펫이 의미적으로 관련 있다면 높은 점수를 주세요.  
-2. 각 검색 결과의 제목과 스니펫을 분석해, 질문 의도와의 의미적 유사도를 평가하세요.  
-3. 한국어/영어 결과 중복은 제거하세요. (같은 내용을 다룬다면 하나만 선택)  
-4. 최신 정보를 우선시하세요. (출판일이 언급된 경우 최근 것을 우선)  
-5. 필요하면 영어를 한국어로 번역해 의미를 이해한 뒤 관련성을 평가하세요.  
-
-출력 형식은 관련성이 높은 결과들의 인덱스만 JSON 배열로 반환하세요:
-[0, 2, 5]
-
-다른 설명이나 부가 정보 없이 오직 JSON 배열만 출력하세요.
-"""
+SEARCH_RERANKING_SYSTEM = load_prompt_text("search_reranking.md")
+TOOL_SELECTION_SYSTEM = load_prompt_text("tool_selection.md")
 
 def rerank_search_results(question: str, search_results: List[Dict]) -> List[Dict]:
     """검색 결과를 질문 관련성에 따라 리랭킹"""
@@ -278,44 +243,29 @@ def _sse(event: str, data: Any) -> str:
 # ===============================
 # 유틸: 팔로업 메시지 구성
 # ===============================
-FOLLOWUP_SYSTEM = """
-당신은 전문 분석 어시스턴트입니다.  
-아래 규칙을 반드시 따라 최종 답변을 작성하세요.
-
-⚡ 출력 규칙 (엄격히 지켜야 함)
-1. 반드시 **Markdown 형식**만 사용 (HTML, 버튼, 이모지, '출처', '바로가기' 같은 표현 금지).
-2. 답변은 항상 두 섹션으로 작성:
-   ## 관련 법률 요약
-   - **법령명 (제XX조)**  
-     설명 한 줄  
-     [출처](URL)
-
-   - 동일 법령의 여러 조문도 위와 같이 각각 불릿·줄바꿈
-3. ## 사업장 안전관리 핵심 조치  
-   1. 번호 리스트로 작성  
-   2. 각 항목은 짧은 문장으로 기술  
-   3. 항목 사이 반드시 줄바꿈 유지
-4. 링크는 반드시 `[출처](URL)` 형식으로만 표시.  
-   다른 표현(예: '출처:', '바로가기', URL 단독)은 절대 금지.
-5. 문단·불릿·번호 리스트 사이에는 빈 줄 한 줄 반드시 넣을 것.
-"""
-
 def build_followup_messages(
     question: str,
     prep_message: str,
-    tool_results_texts: Optional[List[str]] = None
+    tool_results_texts: Optional[List[str]] = None,
+    tool_names: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
+    selection = select_followup_prompt(question, tool_names, tool_results_texts)
+    tags_text = ", ".join(sorted(selection.tags))
+    print(f"  [PROMPT] 사용된 응답 프롬프트: {selection.name} (tags={tags_text})")
+
     messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": FOLLOWUP_SYSTEM},
+        {"role": "system", "content": selection.content},
         {"role": "user", "content": question},
     ]
-    # 모델 컨텍스트를 안정화하기 위해 'assistant preface' 를 명시적으로 넣어준다.
     if prep_message:
         messages.append({"role": "assistant", "content": prep_message})
 
     if tool_results_texts:
-        joined = "아래는 툴 실행 결과입니다:\n\n" + "\n\n".join(tool_results_texts)
+        joined_header = "아래는 이번에 수행한 도구 결과입니다.\n\n"
+        joined = joined_header + "\n\n".join(tool_results_texts)
         messages.append({"role": "system", "content": joined})
+        messages.append({"role": "system", "content": joined})
+
     return messages
 
 # ===============================
@@ -371,13 +321,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     # ===============================
     # 과거 대화 로그를 툴 호출 판단에도 활용
     messages_for_tool_call = history_messages + [
-        {
-            "role": "system",
-            "content": 
-            """당신은 사용자의 질문에 답하기 위해 필요한 도구를 선택하는 전문가입니다.  
-필요하다면 여러 개의 도구를 동시에 호출할 수도 있습니다.  
-불필요한 도구는 호출하지 마세요.""",
-        },
+{"role": "system", "content": TOOL_SELECTION_SYSTEM},
         {"role": "user", "content": query.question},
     ]
 
@@ -390,6 +334,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
 
     # 툴 호출이 필요한지 판단
     tool_calls = first.choices[0].message.tool_calls
+    planned_tool_names = [tc.function.name for tc in tool_calls] if tool_calls else []
     # 첫 응답 메시지가 툴 호출 없이 바로 컨텐츠를 포함할 수도 있음
     prep_message = first.choices[0].message.content or "" 
 
@@ -405,6 +350,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
         # ===============================
         tool_results = []
         tool_results_texts = []
+        executed_tool_names: List[str] = []
 
         if tool_calls:
             print("  [비스트리밍] 툴 호출 실행 중...")
@@ -414,6 +360,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
                     args = json.loads(tc.function.arguments)
                     tool_result = call_tool(tool_name, args)
                     tool_results.append(tool_result)
+                    executed_tool_names.append(tool_name)
                     tool_results_texts.append(f"[{tool_name}] 결과:\n{json.dumps(tool_result, ensure_ascii=False)}")
                 except Exception as e:
                     print(f"  [비스트리밍] 툴 호출 오류: {str(e)}")
@@ -422,7 +369,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
         # 팔로업 메시지 구성
         # 과거 대화 로그도 함께 전달하여 최종 답변 생성
         final_messages = history_messages + build_followup_messages(
-            query.question, prep_message, tool_results_texts
+            query.question, prep_message, tool_results_texts, executed_tool_names or planned_tool_names
         )
 
         # 최종 답변 생성
@@ -471,6 +418,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
 
             tool_results = []
             tool_results_texts = []
+            executed_tool_names: List[str] = []
 
             # 툴 호출이 있으면 실행
             if tool_calls:
@@ -483,7 +431,8 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
                         # 툴 호출
                         tool_result = call_tool(tool_name, args)
                         tool_results.append(tool_result)
-                        
+                        executed_tool_names.append(tool_name)
+
                         result_text = f"[{tool_name}] 결과:\n{json.dumps(tool_result, ensure_ascii=False)}"
                         tool_results_texts.append(result_text)
                         
@@ -502,7 +451,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
                 # 팔로업 메시지 구성
                 # 과거 대화 로그도 함께 전달하여 최종 답변 생성
                 final_messages = history_messages + build_followup_messages(
-                    query.question, prep_message, tool_results_texts
+                    query.question, prep_message, tool_results_texts, executed_tool_names or planned_tool_names
                 )
 
                 # 최종 답변 스트리밍

@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUIStore } from "../store/uiStore";
 import { useScrollToBottom } from "./hooks/useScrollToBottom";
+import { formatAnswer } from "./utils/formatAnswer";
 
 /* 👇 스트리밍/저장 API */
 import { askStream, saveMessage } from "../api/api";
@@ -247,12 +248,12 @@ export default function ChatArea() {
                     {msg.content}
                   </div>
                 ) : (
-                  <div className="prose prose-lg max-w-none text-gray-800">
+                  <div className="prose prose-xl max-w-none text-gray-800">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={markdownComponents}
                     >
-                      {msg.content}
+                      {formatAnswer(msg.content)}
                     </ReactMarkdown>
                   </div>
                 )}
@@ -262,7 +263,7 @@ export default function ChatArea() {
             {/* 스트리밍 중일 때 에페메랄 프리뷰 */}
             {streaming && (
               <div className="mb-6 flex justify-start">
-                <div className="prose prose-lg max-w-none text-gray-800">
+                <div className="prose prose-xl max-w-none text-gray-800">
                   {streamPrep && (
                     <div className="text-sm text-gray-500 mb-2">{streamPrep}</div>
                   )}
@@ -270,7 +271,7 @@ export default function ChatArea() {
                     remarkPlugins={[remarkGfm]}
                     components={markdownComponents}
                   >
-                    {streamText || " "}
+                    {formatAnswer(streamText || " ")}
                   </ReactMarkdown>
                   {streamSources?.length ? (
                       <div className="mt-2 text-xs text-gray-500">출처 {streamSources.length}개 로딩됨</div>
