@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, type ComponentPropsWithoutRef, type MouseEvent } from "react";
+﻿import { useRef, useEffect, useState, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import { useChatStore } from "../store/chatStore";
 import { ShieldEllipsis, CircleFadingArrowUp, Aperture, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";

@@ -15,7 +15,19 @@ export default function SourcePanel() {
   const iframeUrl = toMobileUrl(sourceUrl);
   console.log("[iframe 최종 URL]", iframeUrl);
 
-  const isNamuWiki = sourceUrl.includes("namu.wiki");
+  // ❌ iframe 차단 도메인 목록
+  const blockedDomains = [
+    "namu.wiki",
+    "github.com",
+    "linkedin.com",
+    "twitter.com", // 필요에 따라 추가
+    "youtube.com",
+  ];
+
+  // 현재 sourceUrl이 차단 대상인지 확인
+  const isBlocked = blockedDomains.some((domain) =>
+    sourceUrl.includes(domain)
+  );
 
   return (
     <div className="w-full h-full flex flex-col bg-white">
@@ -36,9 +48,9 @@ export default function SourcePanel() {
       </div>
 
       {/* iframe or fallback */}
-      {isNamuWiki ? (
+      {isBlocked ? (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-3">
-          <div>나무위키는 보안 정책 때문에 직접 표시할 수 없습니다.</div>
+          <div>해당 사이트는 보안 정책상 직접 표시할 수 없습니다.</div>
           <a
             href={sourceUrl}
             target="_blank"

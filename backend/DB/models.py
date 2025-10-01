@@ -29,4 +29,5 @@ class ChatLog(Base):
     user_id = Column(String, index=True)
     role = Column(String)       # "user" or "assistant"
     content = Column(Text)
-    created_at = Column(DateTime, default=datetime.now)
+    summary = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
