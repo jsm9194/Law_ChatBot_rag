@@ -10,7 +10,15 @@ export async function createConversation(userId: string) {
 }
 
 export async function getConversations(userId: string) {
-  const res = await fetch(`${BASE_URL}/conversations/${userId}`);
+  const res = await fetch(`${BASE_URL}/conversations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to get conversations: ${res.status}`);
+  }
   return res.json();
 }
 

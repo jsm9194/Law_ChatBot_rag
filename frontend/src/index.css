@@ -129,8 +129,23 @@ button:focus-visible {
 }
 
 /* 제목 스타일 */
-.prose h1,
-.prose h2, 
+.prose h1
+{ 
+  font-size: x-large;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.prose h2
+{
+  font-size: large;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
 .prose h3 {
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;

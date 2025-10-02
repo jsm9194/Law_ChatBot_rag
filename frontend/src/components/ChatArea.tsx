@@ -213,7 +213,7 @@ export default function ChatArea() {
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex flex-col max-w-[58rem] w-full bg-white relative mx-auto overflow-y-auto"
+      className="flex-1 flex flex-col max-w-[58rem] w-full bg-white relative mx-auto overflow-y-auto "
     >
       {/* 메시지 영역 */}
       <div className="flex-1 p-4">
