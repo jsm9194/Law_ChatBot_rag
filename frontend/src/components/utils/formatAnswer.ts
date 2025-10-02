@@ -22,10 +22,6 @@ export function formatAnswer(raw: string): string {
   // 3. 구분선
   s = s.replace(/-{3,}/g, "\n\n---\n\n");
 
-  // 4. ✅ 번호 있는 리스트 (항상 줄바꿈 + 공백 보장)
-  // 예: "1.항목" → "\n\n1. 항목"
-  s = s.replace(/(\d+)\.\s*(?=\S)/g, "\n\n$1. ");
-
   // 5. 불릿 리스트
   s = s.replace(/•\s*/g, "- ");
   s = s.replace(/(?:^|\n)([-*+])\s+/g, "\n\n- ");

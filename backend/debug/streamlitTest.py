@@ -1,5 +1,5 @@
 import streamlit as st
-from query_qdrant import ask  # 우리가 수정한 ask 함수 import
+from backend.tools.query_qdrant import ask  # 우리가 수정한 ask 함수 import
 
 # --------------------------
 # 페이지 기본 설정

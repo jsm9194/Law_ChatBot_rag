@@ -17,12 +17,12 @@ from DB.models import ChatLog
 from routers import conversations, messages
 
 # 툴 모듈
-from query_qdrant import ask as ask_law
-from case_api import search_case_list, get_case_detail
-from search_goolge import google_search
+from tools.query_qdrant import ask as ask_law
+from tools.case_api import search_case_list, get_case_detail
+from tools.search_goolge import google_search
 
 # 툴 정의
-from tools_config import tools, TOOL_MESSAGES
+from tools.tools_config import tools, TOOL_MESSAGES
 from prompts import load_prompt_text, select_followup_prompt
 
 from datetime import datetime
@@ -423,6 +423,7 @@ def build_followup_messages(
     - system: 도구 결과(있으면)
     """
     selection = select_followup_prompt(question, tool_names, tool_results_texts)
+    print(f"  [PROMPT] 사용된 응답 프롬프트: {selection.name} (tags={', '.join(sorted(selection.tags))})")
     log_tool_event("PROMPT", f'응답 프롬프트 선택: {selection.name}', {'tags': sorted(selection.tags)})
 
     messages: List[Dict[str, Any]] = [
@@ -441,6 +442,7 @@ def build_followup_messages(
 # ===============================
 def call_tool(name: str, arguments: dict):
     log_tool_event("TOOL-CALL", f"{name} 실행", {"arguments": arguments})
+    print("? [TOOL CALL]", name, arguments)
     try:
         if name == "law":
             result = ask_law(arguments["query"])
@@ -469,10 +471,17 @@ def call_tool(name: str, arguments: dict):
 @app.post("/ask")
 def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     log_tool_event("ASK", "요청 수신", {"conversation_id": query.conversation_id, "question": query.question})
+    print("\n[ASK 호출됨]")
+    print(f"  대화 ID: {query.conversation_id}")
+    print(f"  질문: {query.question}\n")
 
     # 🔹 히스토리 로딩 (롤링 요약 반영)
     history_messages = load_history(db, query.conversation_id)
     log_tool_event("HISTORY", "최근 대화 불러오기", {"count": len(history_messages)})
+    print("  === 과거 대화 로그(압축) ===")
+    for msg in history_messages:
+        print(f"  {msg['role']}: {msg['content']}")
+    print("  ===========================")
 
     # 🔹 툴 호출 판단 (mini 사용)
     messages_for_tool_call = history_messages + [
