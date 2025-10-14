@@ -5,7 +5,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useUIStore } from "../store/uiStore";
 import { useScrollToBottom } from "./hooks/useScrollToBottom";
-import { formatAnswer } from "./utils/formatAnswer";
+import ExamplePrompts from "./widgets/ExamplePrompts";
+// import { formatAnswer } from "./utils/formatAnswer";
+
 
 /* 👇 스트리밍/저장 API */
 import { askStream, saveMessage } from "../api/api";
@@ -97,10 +99,10 @@ export default function ChatArea() {
   const streamFinalizedRef = useRef(false);
 
   // 전송
-  const handleSend = async () => {
-    if (!draft.trim() || !conversationId) return;
+  const handleSend = async (text?: string) => {
+    const userText = (text ?? draft).trim();
+    if (!userText || !conversationId) return;
 
-    const userText = draft.trim();
     setDraft(conversationId, "");
 
     if (!USE_STREAMING) {
@@ -221,20 +223,13 @@ export default function ChatArea() {
           <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 space-y-4">
             <h2 className="text-xl font-semibold">무엇을 도와드릴까요? 🤔</h2>
             <p className="text-sm">아래 예시 질문을 클릭해 대화를 시작해보세요.</p>
-            <ul className="space-y-2 text-sm text-left">
-              <li className="cursor-pointer hover:text-blue-500">
-                📌 산업안전보건법에서 응급조치 의무는?
-              </li>
-              <li className="cursor-pointer hover:text-blue-500">
-                📌 화재 발생 시 사업주의 책임은?
-              </li>
-              <li className="cursor-pointer hover:text-blue-500">
-                📌 판례: 시설관리 중 사고 사례
-              </li>
-              <li className="cursor-pointer hover:text-blue-500">
-                📌 검색: 산업안전보건법 개정 일정 알려줘
-              </li>
-            </ul>
+            <ExamplePrompts
+              onSelect={(selectedText) => {
+                const cleanText = selectedText.replace(/^📌\s*/, "");
+                setDraft(conversationId!, cleanText);
+                handleSend(cleanText); // 자동 전송
+              }}
+            />
           </div>
         ) : (
           <>
@@ -253,7 +248,7 @@ export default function ChatArea() {
                       remarkPlugins={[remarkGfm]}
                       components={markdownComponents}
                     >
-                      {formatAnswer(msg.content)}
+                      {(msg.content)}
                     </ReactMarkdown>
                   </div>
                 )}
@@ -264,14 +259,19 @@ export default function ChatArea() {
             {streaming && (
               <div className="mb-6 flex justify-start">
                 <div className="prose prose-xl max-w-none text-gray-800">
-                  {streamPrep && (
-                    <div className="text-sm text-gray-500 mb-2">{streamPrep}</div>
+                  {(streamPrep || streamSources) && (
+                    <div className="text-sm text-gray-500 mb-3 flex flex-col gap-1">
+                      {streamPrep && <span>🧩 {streamPrep}</span>}
+                      {streamSources && streamSources.length > 0 && (
+                        <span>🔗 출처 {streamSources.length}개 확인됨</span>
+                      )}
+                    </div>
                   )}
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={markdownComponents}
                   >
-                    {formatAnswer(streamText || " ")}
+                    {(streamText || " ")}
                   </ReactMarkdown>
                   {streamSources?.length ? (
                       <div className="mt-2 text-xs text-gray-500">출처 {streamSources.length}개 로딩됨</div>

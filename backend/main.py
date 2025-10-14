@@ -71,11 +71,8 @@ class Query(BaseModel):
 # SSE 유틸
 # ===============================
 def _sse(event: str, data: Any) -> str:
-    if not isinstance(data, str):
-        data = json.dumps(data, ensure_ascii=False)
-    lines = data.splitlines() or [""]
-    formatted_data = "\n".join(f"data: {line}" for line in lines)
-    return f"event: {event}\n{formatted_data}\n\n"
+    payload = json.dumps(data, ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n"
 
 # ===============================
 # 답변 요약 (모델 호출)
@@ -578,7 +575,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                     part = chunk.choices[0].delta.content
                     collected_chunks.append(part)
-                    yield _sse("chunk", part)
+                    yield _sse("chunk", {"delta": {"content": part}})
 
             full_answer = "".join(collected_chunks)
 
@@ -595,7 +592,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
             ))
             db_session.commit()
 
-            yield _sse("done", {"status": "complete"})
+            yield _sse("done", {"choices": [{"finish_reason": "stop"}]})
         finally:
             db_session.close()
 

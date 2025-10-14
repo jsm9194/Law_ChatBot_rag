@@ -1,5 +1,11 @@
+// ================================
+// 🌐 API BASE CONFIG
+// ================================
 export const BASE_URL = "http://localhost:8000";
 
+// ================================
+// 📌 기본 REST API
+// ================================
 export async function createConversation(userId: string) {
   const res = await fetch(`${BASE_URL}/conversation/new`, {
     method: "POST",
@@ -15,10 +21,7 @@ export async function getConversations(userId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id: userId }),
   });
-
-  if (!res.ok) {
-    throw new Error(`Failed to get conversations: ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`Failed to get conversations: ${res.status}`);
   return res.json();
 }
 
@@ -65,18 +68,15 @@ export async function updateConversation(conversationId: string, title: string) 
 }
 
 export async function deleteConversation(conversationId: string) {
-  const res = await fetch(`${BASE_URL}/conversation/${conversationId}`, {
-    method: "DELETE",
-  });
+  const res = await fetch(`${BASE_URL}/conversation/${conversationId}`, { method: "DELETE" });
   return res.json();
 }
 
+// ================================
+// ⚡️ 스트리밍 SSE 설정 (OpenAI 표준)
+// ================================
 
-/* ------------------------- */
-/*      👇 스트리밍 추가      */
-/* ------------------------- */
-
-/** 서버가 내려줄 가능성이 있는 출처 타입(필요 시 확장) */
+// 출처 정보 (법령·판례·뉴스 등)
 export type Source = {
   law?: string;
   article?: string;
@@ -84,15 +84,13 @@ export type Source = {
   [key: string]: unknown;
 };
 
-/** done 이벤트에 실리는 메타(서버 구현에 맞게 확장 가능) */
+// done 이벤트 메타정보
 export type DoneMeta = {
-  id?: string;
-  fallback?: "non-stream" | "stream";
-  partial?: boolean;
-  reason?: string;
+  choices?: { finish_reason?: string }[];
   [key: string]: unknown;
 };
 
+// 스트리밍 핸들러
 export type AskStreamHandlers = {
   onPrep?: (s: string) => void;
   onSources?: (xs: Source[]) => void;
@@ -101,14 +99,14 @@ export type AskStreamHandlers = {
   onError?: (err: string) => void;
 };
 
-/** Abort 에러 판별 (any 금지) */
+// Abort 예외 감지
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
 }
 
 /**
- * SSE로 /ask 스트림을 구독합니다.
- * 반환값의 abort()로 스트림을 중단할 수 있습니다.
+ * GPT 표준 JSON 기반 SSE 스트림 핸들러
+ * 백엔드가 {"delta":{"content":"..."}} 형식으로 전송한다고 가정
  */
 export function askStream(
   conversationId: string,
@@ -122,15 +120,16 @@ export function askStream(
     try {
       const res = await fetch(`${BASE_URL}/ask`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({ conversation_id: conversationId, question }),
         signal: ctrl.signal,
       });
 
-      if (debug) {
+      if (debug)
         console.log("[SSE] status", res.status, res.headers.get("content-type"));
-      }
-
       if (!res.ok || !res.body) {
         handlers.onError?.(`HTTP ${res.status}`);
         return;
@@ -141,7 +140,6 @@ export function askStream(
       let buffer = "";
       let sawDone = false;
       let nChunk = 0;
-      let lastChunkAt = 0;
 
       const mark = (label: string) => {
         if (debug) console.log(`[SSE] ${label} t=${Date.now()}ms`);
@@ -152,8 +150,8 @@ export function askStream(
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-
         let idx = buffer.indexOf("\n\n");
+
         while (idx >= 0) {
           const raw = buffer.slice(0, idx).trim();
           buffer = buffer.slice(idx + 2);
@@ -174,14 +172,24 @@ export function askStream(
 
             const dataText = dataChunks.join("\n");
 
+            // ===============================
+            // ✅ chunk (모델 토큰 스트림)
+            // ===============================
             if (ev === "chunk") {
               nChunk++;
-              lastChunkAt = Date.now();
-              if (debug && nChunk % 20 === 0) {
-                console.log(`[SSE] chunk #${nChunk} (len=${dataText.length})`);
-              }
-              handlers.onChunk?.(dataText);
-            } else if (ev === "prep") {
+              const parsed = JSON.parse(dataText);
+              const text = parsed?.delta?.content ?? "";
+
+              if (debug && nChunk % 20 === 0)
+                console.log(`[SSE] chunk #${nChunk} (len=${text.length})`);
+
+              if (text) handlers.onChunk?.(text);
+            }
+
+            // ===============================
+            // 나머지 이벤트
+            // ===============================
+            else if (ev === "prep") {
               handlers.onPrep?.(dataText);
             } else if (ev === "sources") {
               try {
@@ -193,13 +201,10 @@ export function askStream(
             } else if (ev === "done") {
               sawDone = true;
               mark("done");
-              // 메타는 있어도 없어도 됨
-              let meta: DoneMeta | undefined;
-              try { meta = JSON.parse(dataText) as DoneMeta; } catch { /* ignore */ }
-              handlers.onDone?.(meta);
+              const parsed = JSON.parse(dataText);
+              handlers.onDone?.(parsed as DoneMeta);
             } else if (ev === "error") {
               mark("error");
-              // error payload는 문자열일 수 있으므로 그대로 전달
               handlers.onError?.(dataText || "error");
             }
           }
@@ -208,20 +213,19 @@ export function askStream(
         }
       }
 
+      // ✅ 스트림 종료 후 정리
       if (!sawDone) {
-        console.warn("[SSE] ended without done; chunks:", nChunk, "lastChunkAt:", lastChunkAt);
-        handlers.onDone?.({ partial: true, reason: "stream-ended" });
+        console.warn("[SSE] ended without done; chunks:", nChunk);
+        handlers.onDone?.({ choices: [{ finish_reason: "stream-ended" }] });
       } else {
-        // done 이벤트에서 이미 meta를 전달했을 수 있지만,
-        // 여기서는 성공 종료 신호만 보강
-        handlers.onDone?.({ fallback: "stream" });
+        handlers.onDone?.({ choices: [{ finish_reason: "stop" }] });
       }
     } catch (e: unknown) {
       if (!isAbortError(e)) {
         console.error("[SSE] exception", e);
         handlers.onError?.(String(e));
       }
-      handlers.onDone?.({ partial: true, reason: "exception" });
+      handlers.onDone?.({ choices: [{ finish_reason: "exception" }] });
     }
   })();
 
