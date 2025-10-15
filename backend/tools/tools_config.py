@@ -41,23 +41,23 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "case_detail",
-            "description": "판례 상세 조회 (판례정보일련번호 기반). search_cases 결과의 사건ID를 그대로 사용한다.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "case_id": {
-                        "type": "string",
-                        "description": "search_cases 결과에서 반환된 사건ID (판례정보일련번호)"
-                    }
-                },
-                "required": ["case_id"],
-            },
-        },
-    },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "case_detail",
+    #         "description": "판례 상세 조회 (판례정보일련번호 기반). search_cases 결과의 사건ID를 그대로 사용한다.",
+    #         "parameters": {
+    #             "type": "object",
+    #             "properties": {
+    #                 "case_id": {
+    #                     "type": "string",
+    #                     "description": "search_cases 결과에서 반환된 사건ID (판례정보일련번호)"
+    #                 }
+    #             },
+    #             "required": ["case_id"],
+    #         },
+    #     },
+    # },
     {
         "type": "function",
         "function": {

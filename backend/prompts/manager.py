@@ -74,7 +74,8 @@ def infer_context_tags(
     if tool_set & {"case_detail", "search_cases"}:
         tags.add("case")
     if tool_set & {"web_search"}:
-        tags.add("news")
+        tags = {"general", "news"}
+        return tags  # web_search가 있으면 무조건 news
 
     if any(keyword.lower() in lowered for keyword in LAW_KEYWORDS):
         tags.add("law")

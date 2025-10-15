@@ -8,6 +8,7 @@ import {
   PanelRightOpen,
 } from "lucide-react";
 
+
 export default function Sidebar() {
   const {
     conversations,
@@ -54,6 +55,7 @@ export default function Sidebar() {
 
   // 대화 선택
   const handleSelectConversation = async (id: string) => {
+    useUIStore.setState({ sourcePanelOpen: false, sourceUrl: null });
     setConversationId(id); // ✅ 현재 선택 상태 갱신
     await loadMessages(id);
   };
@@ -61,6 +63,7 @@ export default function Sidebar() {
   // 새 대화 생성
   const handleNewConversation = async () => {
     const newConv = await createConversation(userId);
+    useUIStore.setState({ sourcePanelOpen: false, sourceUrl: null });
     setConversationId(newConv.id); // ✅ 새 대화 생성 후 자동 선택
   };
 

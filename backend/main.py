@@ -450,6 +450,7 @@ def call_tool(name: str, arguments: dict):
                 result = get_case_detail(arguments["nb"])
             else:
                 result = {"cases": search_case_list(**arguments)}
+                
         elif name == "case_detail":
             result = get_case_detail(arguments["case_id"])
         elif name == "web_search":
@@ -539,6 +540,31 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
                         result = call_tool(tool_name, args)
                         tool_results.append(result)
                         executed_tool_names.append(tool_name)
+
+                        # fallback 감지 및 Google 검색 전환
+                        if "error" in str(result):
+                            log_tool_event(
+                                "FALLBACK",
+                                f"{tool_name} 실패 → Google 검색 fallback 실행",
+                                {"query": args.get("query")},
+                            )
+                            fallback_result = enhanced_web_search(
+                                args.get("query", ""),
+                                args.get("count", 8),
+                                args.get("time_range", "any"),
+                            )
+
+                            # 🔹 결과 교체
+                            result = fallback_result
+                            tool_results[-1] = fallback_result
+
+                            # 🔹 툴 이름도 web_search로 교체 (프롬프트 선택 영향)
+                            executed_tool_names = [
+                                "web_search" 
+                            ]
+
+                            # 🔹 프론트로 상태 알림
+                            yield _sse("status", "법제처 API 실패로 Google 검색으로 대체합니다.")
 
                         formatted = format_tool_result_for_prompt(tool_name, result)
                         tool_results_texts.append(formatted)

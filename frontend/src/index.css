@@ -159,3 +159,51 @@ button:focus-visible {
   border-top: 2px solid #d1d5db; /* Tailwind gray-300 */
   margin: 2rem 0; /* 위아래 여백 넉넉히 */
 }
+
+/* === GPT-style markdown table override === */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 0.95rem;
+  margin: 1rem 0;
+  border: 1px solid #e5e7eb;
+}
+
+.prose th,
+.prose td {
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+.prose th:last-child,
+.prose td:last-child {
+  border-right: none;
+}
+
+.prose tr:last-child td {
+  border-bottom: none;
+}
+
+.prose th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #111;
+}
+
+.prose tr:nth-child(even) td {
+  background-color: #fafafa;
+}
+
+.prose tr:hover td {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.prose td,
+.prose th {
+  border-color: rgba(0, 0, 0, 0.08);
+}
