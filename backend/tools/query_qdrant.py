@@ -13,7 +13,7 @@ qdrant = QdrantClient(host="localhost", port=6333)
 COLLECTION_NAME = "laws"
 
 
-def rewrite_query_for_search(query: str, model: str = "gpt-4o-mini") -> str:
+def rewrite_query_for_search(query: str, model: str = "gpt-4.1-mini") -> str:
     """
     사용자의 자연어 질문을 Qdrant 벡터 검색에 최적화된 질의로 리라이팅.
     예: '사업주의 안전조치 의무는?' -> '산업안전보건법 사업주 안전조치 의무 관련 조문'
@@ -23,6 +23,12 @@ def rewrite_query_for_search(query: str, model: str = "gpt-4o-mini") -> str:
     사용자가 입력한 질문의 의도를 파악하고 법령 검색에 최적화된 형태로 질문을 리라이팅해줘.
     불필요한 단어는 제거하고, 핵심 키워드를 중심으로 문장을 재구성해줘.
     임베딩에 사용한 청크데이터는 법령명, 조문번호, 조문내용의 json 파일이야.
+    임베딩 청크 데이터 예시:
+    {{
+      "law_name": "산업안전보건법",
+      "조문번호": "29",
+      "조문내용": "사업주는 근로자의 안전과 보건을 유지하기 위하여 필요한 조치를 하여야 한다."
+    }}
 
     사용자 질문:
     {query}
