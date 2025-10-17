@@ -2,7 +2,7 @@
   {
     "name": "law_focus",
     "prompt_file": "followup_law.md",
-    "priority": 90,
+    "priority": 80,
     "conditions": {
       "context_tags_any": ["law"]
     }
@@ -10,7 +10,7 @@
   {
     "name": "case_focus",
     "prompt_file": "followup_case.md",
-    "priority": 80,
+    "priority": 70,
     "conditions": {
       "context_tags_any": ["case"]
     }
@@ -18,7 +18,7 @@
   {
     "name": "news_focus",
     "prompt_file": "followup_news.md",
-    "priority": 70,
+    "priority": 90,
     "conditions": {
       "context_tags_any": ["news"]
     }

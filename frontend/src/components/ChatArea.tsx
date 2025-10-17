@@ -52,6 +52,11 @@ export default function ChatArea() {
 
   const [inputBoxHeight, setInputBoxHeight] = useState(80);
 
+  // messages 디버깅
+  useEffect(() => {
+    console.log("📩 현재 messages:", messages);
+  }, [messages]);
+
   const markdownComponents = {
     a: ({
       href,
@@ -100,6 +105,7 @@ export default function ChatArea() {
 
   // 전송
   const handleSend = async (text?: string) => {
+    console.log("🚀 handleSend 실행됨", Date.now());
     const userText = (text ?? draft).trim();
     if (!userText || !conversationId) return;
 
