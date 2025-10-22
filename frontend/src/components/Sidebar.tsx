@@ -20,6 +20,7 @@ export default function Sidebar() {
   } = useChatStore();
 
   const { sidebarOpen, toggleSidebar } = useUIStore();
+  
   const userId = "test-user";
 
   const [menuOpen, setMenuOpen] = useState<string | null>(null);

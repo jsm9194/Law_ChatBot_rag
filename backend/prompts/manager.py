@@ -9,6 +9,9 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 PROMPTS_DIR = Path(__file__).resolve().parent
 
+# ✅ 전역 설정: 캐시 사용 여부
+USE_CACHE: bool = True  # False로 바꾸면 프롬프트 교체 모드(캐시 무시)
+
 
 @dataclass(frozen=True)
 class PromptSelection:
@@ -24,12 +27,36 @@ def _ensure_exists(path: Path) -> Path:
     return path
 
 
+# =========================================================
+# ✅ 캐시 제어 가능한 프롬프트 로더
+# =========================================================
+def load_prompt_text(filename: str, use_cache: Optional[bool] = None) -> str:
+    """
+    Prompt 파일을 로드.
+    - use_cache=True (기본): lru_cache 사용
+    - use_cache=False: 파일을 항상 새로 읽음 (prompt 교체 즉시 반영)
+    """
+    effective_cache = USE_CACHE if use_cache is None else use_cache
+
+    path = _ensure_exists(PROMPTS_DIR / filename)
+
+    if effective_cache:
+        return _load_prompt_text_cached(filename)
+    else:
+        # 캐시 무시 → 파일 즉시 재로드
+        return path.read_text(encoding="utf-8-sig")
+
+
 @lru_cache(maxsize=None)
-def load_prompt_text(filename: str) -> str:
+def _load_prompt_text_cached(filename: str) -> str:
+    """내부용 캐시된 파일 로더"""
     path = _ensure_exists(PROMPTS_DIR / filename)
     return path.read_text(encoding="utf-8-sig")
 
 
+# =========================================================
+# followup_prompts.json 로드
+# =========================================================
 @lru_cache(maxsize=1)
 def _load_followup_config() -> List[Dict[str, Any]]:
     path = _ensure_exists(PROMPTS_DIR / "followup_prompts.json")
@@ -53,6 +80,9 @@ def _load_followup_config() -> List[Dict[str, Any]]:
     return normalised
 
 
+# =========================================================
+# 태그 및 조건 매칭
+# =========================================================
 LAW_KEYWORDS = ["법령", "조문", "법률", "규정", "의무", "법적"]
 CASE_KEYWORDS = ["판례", "사건", "재판", "심판", "소송"]
 NEWS_KEYWORDS = ["뉴스", "동향", "최근", "보도", "발표", "업데이트"]
@@ -130,17 +160,21 @@ def _match_conditions(
     return True
 
 
+# =========================================================
+# 메인 선택 로직
+# =========================================================
 def select_followup_prompt(
     question: str,
     tool_names: Optional[Sequence[str]] = None,
     tool_results_texts: Optional[Sequence[str]] = None,
+    use_cache: Optional[bool] = None,  # ✅ 캐시 제어 파라미터 추가
 ) -> PromptSelection:
     normalized_tools = {tool.lower() for tool in (tool_names or [])}
     tags = infer_context_tags(question, tool_names, tool_results_texts)
 
     for entry in _load_followup_config():
         if _match_conditions(entry.get("conditions", {}), question, normalized_tools, tags):
-            content = load_prompt_text(entry["prompt_file"])
+            content = load_prompt_text(entry["prompt_file"], use_cache=use_cache)
             return PromptSelection(
                 name=entry.get("name", "unknown"),
                 content=content,
@@ -149,19 +183,10 @@ def select_followup_prompt(
             )
 
     # fallback: 기본 프롬프트
-    fallback = load_prompt_text("followup_default.md")
+    fallback = load_prompt_text("followup_default.md", use_cache=False)
     return PromptSelection(
         name="default",
         content=fallback,
         source_file=str(PROMPTS_DIR / "followup_default.md"),
         tags=tags,
     )
-
-
-__all__ = [
-    "load_prompt_text",
-    "infer_context_tags",
-    "select_followup_prompt",
-    "PromptSelection",
-]
-

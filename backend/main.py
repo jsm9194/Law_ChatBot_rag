@@ -68,7 +68,7 @@ class Query(BaseModel):
     question: str
 
 # ===============================
-# SSE 유틸
+# SSE 유틸 스트리밍 응답 구현용
 # ===============================
 def _sse(event: str, data: Any) -> str:
     payload = json.dumps(data, ensure_ascii=False)
@@ -463,10 +463,13 @@ def call_tool(name: str, arguments: dict):
         log_tool_event("TOOL-ERR", f"{name} 실패", {"error": str(e)})
         traceback.print_exc()
         return {"error": f"Tool execution failed: {str(e)}"}
+    
+
 # ===============================
 # 핵심: /ask 엔드포인트
 # ===============================
 @app.post("/ask")
+
 def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     log_tool_event("ASK", "요청 수신", {"conversation_id": query.conversation_id, "question": query.question})
     print("\n[ASK 호출됨]")
@@ -486,6 +489,13 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
         {"role": "system", "content": load_prompt_text("tool_selection.md")},
         {"role": "user", "content": query.question},
     ]
+    
+    # ✅ 추가: 모델 입력 로그
+    log_tool_event("CTX-IN", "도구선택 입력 메시지 구성", {
+        "messages": [
+            f"{m['role']}: {m['content'][:200]}..." for m in messages_for_tool_call
+        ]
+    })  
 
     first = client.chat.completions.create(
         model="gpt-4.1-mini",
@@ -500,10 +510,19 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     else:
         log_tool_event("TOOL-PLAN", "선택된 도구 없음", None)
     prep_message = first.choices[0].message.content or ""
+    # ✅ 모델의 사전 사고 내용(prep_message) 로그 추가
+    if prep_message:
+        log_tool_event("PREP", "모델 사고 내용(pre-thinking)", {
+            "content": (prep_message[:400] + "...") if len(prep_message) > 400 else prep_message
+        })
+    else:
+        log_tool_event("PREP", "모델 사고 내용 없음", {})
+
 
     # ===============================
     # 스트리밍 응답
     # ===============================
+
     async def _stream_response_generator() -> AsyncIterator[str]:
         db_session = SessionLocal()
         try:
@@ -588,6 +607,14 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
             final_messages = history_messages + build_followup_messages(
                 query.question, tool_results_texts, executed_tool_names or planned_tool_names
             )
+
+            # ✅ 추가: 모델 입력 로그
+            log_tool_event("CTX-IN", "최종 답변 모델 입력 메시지", {
+                "messages": [
+                    f"{m['role']}: {m['content'][:200]}..." for m in final_messages
+                ]
+            })
+
             log_tool_event("MODEL", "최종 답변 스트리밍 시작", {"messages": len(final_messages)})
             yield _sse("status", "응답을 작성하는 중입니다.")
             stream = client.chat.completions.create(

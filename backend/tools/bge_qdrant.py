@@ -4,14 +4,15 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from .law_mapping import make_law_link
 import dotenv
+from sentence_transformers import SentenceTransformer
 
 dotenv.load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 qdrant = QdrantClient(host="localhost", port=6333)
 
-COLLECTION_NAME = "laws"
-
+COLLECTION_NAME = "laws_bge_ko_m3"
+embedder = SentenceTransformer("BAAI/bge-m3")
 
 def rewrite_query_for_search(query: str, model: str = "gpt-4.1-mini") -> str:
     """
@@ -23,6 +24,12 @@ def rewrite_query_for_search(query: str, model: str = "gpt-4.1-mini") -> str:
     사용자가 입력한 질문의 의도를 파악하고 법령 검색에 최적화된 형태로 질문을 리라이팅해줘.
     불필요한 단어는 제거하고, 핵심 키워드를 중심으로 문장을 재구성해줘.
     임베딩에 사용한 청크데이터는 법령명, 조문번호, 조문내용의 json 파일이야.
+    임베딩 청크 데이터 예시:
+    {{
+      "law_name": "산업안전보건법",
+      "조문번호": "29",
+      "조문내용": "사업주는 근로자의 안전과 보건을 유지하기 위하여 필요한 조치를 하여야 한다."
+    }}
 
     사용자 질문:
     {query}
@@ -42,7 +49,7 @@ def rewrite_query_for_search(query: str, model: str = "gpt-4.1-mini") -> str:
         return query  # 실패 시 원문 그대로 사용
 
 
-def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
+def ask(query: str, model: str = "gpt-4o-mini", top_k: int = 5):
     """
     Qdrant에서 관련 법령 검색 후 LLM으로 리라이팅된 쿼리 기반 검색.
     """
@@ -50,12 +57,10 @@ def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
     rewritten_query = rewrite_query_for_search(query)
     print(f"[리라이팅된 검색 쿼리] {rewritten_query}")
 
+
     # 2) 임베딩 생성
     try:
-        embedding = client.embeddings.create(
-            model="text-embedding-3-large",
-            input=rewritten_query
-        ).data[0].embedding
+        embedding = embedder.encode(rewritten_query).tolist()  # numpy → list 변환
     except Exception as e:
         return {"query": query, "error": f"임베딩 생성 실패: {e}"}
 
@@ -64,8 +69,7 @@ def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
         search_results = qdrant.search(  # 최신 API
             collection_name=COLLECTION_NAME,
             query_vector=embedding,
-            limit=top_k,
-            with_payload=True
+            limit=top_k
         )
     except Exception as e:
         return {"query": query, "error": f"Qdrant 검색 실패: {e}"}
@@ -76,23 +80,14 @@ def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
     for idx, r in enumerate(search_results, start=1):
         payload = r.payload
         law_name = payload.get("law_name", "")
-        jo = payload.get("조문번호", "")       
-        text = payload.get("조문내용", "") 
+        jo = payload.get("조문번호", "")
+        text = payload.get("조문내용", "")
         link = make_law_link(law_name, jo)
-
-        # ✅ 계층 구조 조문 표현
-        article_hierarchy = f"제{jo}조" if jo else ""
-        if payload.get("항번호"):
-            article_hierarchy += f" 제{payload['항번호']}항"
-        if payload.get("호번호"):
-            article_hierarchy += f" 제{payload['호번호']}호"
-        if payload.get("목번호"):
-            article_hierarchy += f" {payload['목번호']}목"
 
         sources.append({
             "id": idx,
             "law": law_name,
-            "article": article_hierarchy,
+            "article": f"제{jo}조" if jo else "",
             "url": link
         })
 
