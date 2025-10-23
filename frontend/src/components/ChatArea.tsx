@@ -263,6 +263,16 @@ export default function ChatArea() {
     el.addEventListener("scroll", handleScroll);
     return () => el.removeEventListener("scroll", handleScroll);
   }, [conversationId, messages.length]);
+  
+// ✅ assistant 답변이 끝나면 입력창 자동 포커스
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role === "assistant" && !streaming && !isLoading) {
+      textareaRef.current?.focus();
+    }
+  }, [messages, streaming, isLoading]);
 
 
 
