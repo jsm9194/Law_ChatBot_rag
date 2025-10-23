@@ -218,6 +218,54 @@ export default function ChatArea() {
     streamTextRef.current = streamText;
   }, [streamText]);
 
+  /* ✅ 스크롤 올릴 때 이전 대화 불러오기 (상단 25% 도달 시) */
+
+  // 👇 이걸 컴포넌트 맨 위(useEffect 바깥)에 둬야 함
+  const fetchingRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !conversationId) return;
+
+    const handleScroll = async () => {
+      const scrollHeight = el.scrollHeight;
+      const clientHeight = el.clientHeight;
+      const scrollTop = el.scrollTop;
+
+      // ✅ scrollHeight가 너무 작으면 (대화 짧을 때) 그냥 패스
+      if (scrollHeight < clientHeight * 1.5) return;
+
+      const scrollPosition = scrollTop / (scrollHeight - clientHeight);
+      const isScrollingUp = scrollTop < lastScrollTopRef.current; // ✅ 위로 올리는 중인지 판별
+      lastScrollTopRef.current = scrollTop; // 현재 위치 저장
+
+      if (isScrollingUp && scrollPosition < 0.25 && !fetchingRef.current) {
+        fetchingRef.current = true;
+        console.log("🔼 이전 대화 불러오기 트리거됨");
+
+        try {
+          await useChatStore.getState().loadMessages(
+            conversationId,
+            useChatStore.getState().messages.length
+          );
+        } catch (err) {
+          console.error("이전 대화 불러오기 실패:", err);
+        } finally {
+          // 너무 빠르게 반복 안되도록 살짝 딜레이 후 해제
+          setTimeout(() => {
+            fetchingRef.current = false;
+          }, 1000);
+        }
+      }
+    };
+
+    el.addEventListener("scroll", handleScroll);
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [conversationId, messages.length]);
+
+
+
   return (
     <div
       ref={containerRef}

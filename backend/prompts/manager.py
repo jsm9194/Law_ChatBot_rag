@@ -1,16 +1,20 @@
 ﻿from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
+from openai import OpenAI
+import os
 
 PROMPTS_DIR = Path(__file__).resolve().parent
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ✅ 전역 설정: 캐시 사용 여부
-USE_CACHE: bool = True  # False로 바꾸면 프롬프트 교체 모드(캐시 무시)
+# ✅ 전역 설정
+USE_CACHE: bool = True  # False = 프롬프트 교체 모드
+USE_LLM_TAGGING: bool = True  # True = LLM으로 태깅
+USE_LLM_CONDITION: bool = True  # True = LLM으로 조건 매칭
 
 
 @dataclass(frozen=True)
@@ -21,35 +25,26 @@ class PromptSelection:
     tags: Set[str]
 
 
+# =========================================================
+# 기본 파일 로더
+# =========================================================
 def _ensure_exists(path: Path) -> Path:
     if not path.exists():
         raise FileNotFoundError(f"Prompt 파일을 찾을 수 없습니다: {path}")
     return path
 
 
-# =========================================================
-# ✅ 캐시 제어 가능한 프롬프트 로더
-# =========================================================
 def load_prompt_text(filename: str, use_cache: Optional[bool] = None) -> str:
-    """
-    Prompt 파일을 로드.
-    - use_cache=True (기본): lru_cache 사용
-    - use_cache=False: 파일을 항상 새로 읽음 (prompt 교체 즉시 반영)
-    """
     effective_cache = USE_CACHE if use_cache is None else use_cache
-
     path = _ensure_exists(PROMPTS_DIR / filename)
-
     if effective_cache:
         return _load_prompt_text_cached(filename)
     else:
-        # 캐시 무시 → 파일 즉시 재로드
         return path.read_text(encoding="utf-8-sig")
 
 
 @lru_cache(maxsize=None)
 def _load_prompt_text_cached(filename: str) -> str:
-    """내부용 캐시된 파일 로더"""
     path = _ensure_exists(PROMPTS_DIR / filename)
     return path.read_text(encoding="utf-8-sig")
 
@@ -64,7 +59,7 @@ def _load_followup_config() -> List[Dict[str, Any]]:
     if not isinstance(raw, list):
         raise ValueError("followup_prompts.json 은 리스트 형식이어야 합니다.")
 
-    normalised: List[Dict[str, Any]] = []
+    normalized: List[Dict[str, Any]] = []
     for entry in raw:
         if "prompt_file" not in entry:
             raise ValueError("각 프롬프트 항목에는 prompt_file 이 필요합니다.")
@@ -74,21 +69,59 @@ def _load_followup_config() -> List[Dict[str, Any]]:
             "priority": entry.get("priority", 0),
             "conditions": entry.get("conditions", {}),
         }
-        normalised.append(entry)
+        normalized.append(entry)
 
-    normalised.sort(key=lambda item: item.get("priority", 0), reverse=True)
-    return normalised
+    normalized.sort(key=lambda item: item.get("priority", 0), reverse=True)
+    return normalized
 
 
 # =========================================================
-# 태그 및 조건 매칭
+# LLM 기반 태그 분류
+# =========================================================
+def infer_context_tags_llm(question: str) -> Set[str]:
+    """
+    LLM을 사용하여 문맥 태그를 추론.
+    """
+    prompt = f"""
+    다음 한국어 질문이 어떤 주제에 속하는지 분석해.
+    가능한 태그는 다음 중에서 골라서 JSON 배열로만 반환해:
+    ["law", "case", "news", "general"]
+
+    - law: 법령, 조문, 규정, 안전보건, 의무, 법적 책임 관련
+    - case: 판례, 소송, 재판, 사건 관련
+    - news: 최근 동향, 개정, 발표, 보도 관련
+    - general: 일반적인 설명, 상식, 단순 질의
+
+    질문: {question}
+    JSON 배열로만 출력해. (예: ["law", "case"])
+    """
+
+    try:
+        res = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "너는 법률 질의 태깅 분류기야."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+        )
+        text = res.choices[0].message.content.strip()
+        tags = set(json.loads(text))
+        return tags or {"general"}
+    except Exception as e:
+        print(f"[WARN] LLM 태깅 실패: {e}")
+        return {"general"}
+
+
+# =========================================================
+# 기존 키워드 기반 (fallback)
 # =========================================================
 LAW_KEYWORDS = ["법령", "조문", "법률", "규정", "의무", "법적"]
 CASE_KEYWORDS = ["판례", "사건", "재판", "심판", "소송"]
 NEWS_KEYWORDS = ["뉴스", "동향", "최근", "보도", "발표", "업데이트"]
 
 
-def infer_context_tags(
+def infer_context_tags_keywords(
     question: str,
     tool_names: Optional[Sequence[str]] = None,
     tool_results_texts: Optional[Sequence[str]] = None,
@@ -96,7 +129,6 @@ def infer_context_tags(
     tags: Set[str] = {"general"}
     focus_text = " ".join(filter(None, [question] + list(tool_results_texts or [])))
     lowered = focus_text.lower()
-
     tool_set = {tool.lower() for tool in (tool_names or [])}
 
     if tool_set & {"law"}:
@@ -105,75 +137,93 @@ def infer_context_tags(
         tags.add("case")
     if tool_set & {"web_search"}:
         tags = {"general", "news"}
-        return tags  # web_search가 있으면 무조건 news
+        return tags
 
-    if any(keyword.lower() in lowered for keyword in LAW_KEYWORDS):
+    if any(k.lower() in lowered for k in LAW_KEYWORDS):
         tags.add("law")
-    if any(keyword.lower() in lowered for keyword in CASE_KEYWORDS):
+    if any(k.lower() in lowered for k in CASE_KEYWORDS):
         tags.add("case")
-    if any(keyword.lower() in lowered for keyword in NEWS_KEYWORDS):
+    if any(k.lower() in lowered for k in NEWS_KEYWORDS):
         tags.add("news")
 
     return tags
 
 
-def _text_contains_any(text: str, needles: Iterable[str]) -> bool:
-    lowered = text.lower()
-    return any(needle.lower() in lowered for needle in needles)
-
-
-def _match_conditions(
-    conditions: Dict[str, Any],
+def infer_context_tags(
     question: str,
-    tool_names: Set[str],
-    tags: Set[str],
-) -> bool:
-    if not conditions:
-        return True
-
-    question_lower = question.lower()
-
-    tools_any = conditions.get("tools_any")
-    if tools_any and not ({tool.lower() for tool in tools_any} & tool_names):
-        return False
-
-    tools_all = conditions.get("tools_all")
-    if tools_all and not ({tool.lower() for tool in tools_all} <= tool_names):
-        return False
-
-    tags_any = conditions.get("context_tags_any")
-    if tags_any and not ({tag.lower() for tag in tags_any} & {tag.lower() for tag in tags}):
-        return False
-
-    tags_all = conditions.get("context_tags_all")
-    if tags_all and not ({tag.lower() for tag in tags_all} <= {tag.lower() for tag in tags}):
-        return False
-
-    keywords_any = conditions.get("question_contains_any")
-    if keywords_any and not _text_contains_any(question, keywords_any):
-        return False
-
-    keywords_all = conditions.get("question_contains_all")
-    if keywords_all and not all(keyword.lower() in question_lower for keyword in keywords_all):
-        return False
-
-    return True
+    tool_names: Optional[Sequence[str]] = None,
+    tool_results_texts: Optional[Sequence[str]] = None,
+) -> Set[str]:
+    if USE_LLM_TAGGING:
+        return infer_context_tags_llm(question)
+    else:
+        return infer_context_tags_keywords(question, tool_names, tool_results_texts)
 
 
 # =========================================================
-# 메인 선택 로직
+# LLM 기반 조건 매칭
+# =========================================================
+def _match_conditions_llm(conditions: Dict[str, Any], question: str, tags: Set[str]) -> bool:
+    """
+    LLM을 사용해 conditions와 question, tags의 의미적 일치 여부 판단.
+    """
+    if not conditions:
+        return True
+
+    prompt = f"""
+    다음은 프롬프트 조건과 사용자의 질문 정보입니다.
+    조건을 만족한다고 판단되면 true, 아니면 false를 소문자로만 출력하세요.
+
+    [조건 JSON]
+    {json.dumps(conditions, ensure_ascii=False, indent=2)}
+
+    [질문]
+    {question}
+
+    [문맥 태그]
+    {', '.join(tags)}
+
+    조건에 해당하는 주제나 문맥이라면 true, 전혀 관련 없다면 false.
+    반드시 true 또는 false만 출력.
+    """
+
+    try:
+        res = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "너는 법률 도메인용 조건 매칭 판단기야."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+        )
+        answer = res.choices[0].message.content.strip().lower()
+        return "true" in answer
+    except Exception as e:
+        print(f"[WARN] LLM 조건 매칭 실패: {e}")
+        return False
+
+
+# =========================================================
+# 메인 프롬프트 선택 로직
 # =========================================================
 def select_followup_prompt(
     question: str,
     tool_names: Optional[Sequence[str]] = None,
     tool_results_texts: Optional[Sequence[str]] = None,
-    use_cache: Optional[bool] = None,  # ✅ 캐시 제어 파라미터 추가
+    use_cache: Optional[bool] = None,
 ) -> PromptSelection:
     normalized_tools = {tool.lower() for tool in (tool_names or [])}
     tags = infer_context_tags(question, tool_names, tool_results_texts)
 
     for entry in _load_followup_config():
-        if _match_conditions(entry.get("conditions", {}), question, normalized_tools, tags):
+        conditions = entry.get("conditions", {})
+
+        if USE_LLM_CONDITION:
+            matched = _match_conditions_llm(conditions, question, tags)
+        else:
+            matched = True  # LLM이 꺼진 경우 조건은 무시하거나 기본 True
+
+        if matched:
             content = load_prompt_text(entry["prompt_file"], use_cache=use_cache)
             return PromptSelection(
                 name=entry.get("name", "unknown"),
@@ -182,7 +232,7 @@ def select_followup_prompt(
                 tags=tags,
             )
 
-    # fallback: 기본 프롬프트
+    # fallback
     fallback = load_prompt_text("followup_default.md", use_cache=False)
     return PromptSelection(
         name="default",

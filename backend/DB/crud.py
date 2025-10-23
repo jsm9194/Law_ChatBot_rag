@@ -40,7 +40,7 @@ def get_conversation_logs(db: Session, conversation_id: str, offset: int = 0, li
     return (
         db.query(ChatLog)
         .filter(ChatLog.conversation_id == conversation_id)
-        .order_by(ChatLog.created_at.asc())
+        .order_by(ChatLog.created_at.desc())
         .offset(offset)
         .limit(limit)
         .all()

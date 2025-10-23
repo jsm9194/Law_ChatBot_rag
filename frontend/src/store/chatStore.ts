@@ -123,19 +123,32 @@ export const useChatStore = create<ChatState>()(
             `http://localhost:8000/conversation/${conversationId}?offset=${offset}&limit=${limit}`
           );
 
-          set((state) => ({
-            conversationId,
-            messages:
-              offset === 0
-                ? res.data // ✅ 첫 로딩은 새로 세팅
-                : [...res.data, ...state.messages], // ✅ 스크롤 로딩은 앞에 붙이기
-          }));
+          // ✅ 백엔드가 최신순(desc)으로 주니까 오래된 순으로 reverse()
+          const newMessages = res.data.reverse();
+
+          set((state) => {
+            // ✅ 기존 메시지 중복 방지
+            const existingContents = new Set(state.messages.map((m) => m.content));
+            const filtered = newMessages.filter(
+              (m) => !existingContents.has(m.content)
+            );
+
+            return {
+              conversationId,
+              messages:
+                offset === 0
+                  ? filtered // 첫 로드면 덮어쓰기
+                  : [...filtered, ...state.messages], // 위로 스크롤 시 위에 추가
+            };
+          });
         } catch (err: unknown) {
           set({ error: handleAxiosError(err) });
         } finally {
           set({ isLoading: false });
         }
       },
+
+
 
       // 메시지 보내기
       sendMessage: async (conversationId, userId, content) => {

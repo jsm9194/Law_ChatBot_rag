@@ -513,7 +513,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     # ✅ 모델의 사전 사고 내용(prep_message) 로그 추가
     if prep_message:
         log_tool_event("PREP", "모델 사고 내용(pre-thinking)", {
-            "content": (prep_message[:400] + "...") if len(prep_message) > 400 else prep_message
+            "content": (prep_message[:800] + "...") if len(prep_message) > 800 else prep_message
         })
     else:
         log_tool_event("PREP", "모델 사고 내용 없음", {})
@@ -524,18 +524,17 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     # ===============================
 
     async def _stream_response_generator() -> AsyncIterator[str]:
-        db_session = SessionLocal()
         try:
-            # 🔹 질문을 먼저 저장
-            db_session.add(ChatLog(
+            # ✅ 질문 저장 (user)
+            db.add(ChatLog(
                 conversation_id=query.conversation_id,
                 role="user",
                 user_id="user",
                 content=query.question,
             ))
-            db_session.commit()
+            db.commit()
 
-            # prep_message는 스트림으로만 전달 (최종 입력에는 제외)
+            # prep_message가 있으면 먼저 스트림 전송
             if prep_message:
                 yield _sse("prep", prep_message)
 
@@ -543,54 +542,35 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
             tool_results_texts = []
             executed_tool_names: List[str] = []
 
-            # 도구 실행
+            # ✅ 도구 실행
             if tool_calls:
                 log_tool_event("TOOL-RUN", "도구 실행 시작", {"count": len(tool_calls)})
                 for tc in tool_calls:
                     try:
                         tool_name = tc.function.name
                         args = json.loads(tc.function.arguments)
-
                         meta = TOOL_MESSAGES.get(tool_name, {})
-                        prep_status = meta.get("prep")
-                        if prep_status:
-                            yield _sse("status", prep_status)
+
+                        if meta.get("prep"):
+                            yield _sse("status", meta["prep"])
 
                         result = call_tool(tool_name, args)
                         tool_results.append(result)
                         executed_tool_names.append(tool_name)
 
-                        # fallback 감지 및 Google 검색 전환
+                        # fallback 처리
                         if "error" in str(result):
-                            log_tool_event(
-                                "FALLBACK",
-                                f"{tool_name} 실패 → Google 검색 fallback 실행",
-                                {"query": args.get("query")},
-                            )
-                            fallback_result = enhanced_web_search(
-                                args.get("query", ""),
-                                args.get("count", 8),
-                                args.get("time_range", "any"),
-                            )
-
-                            # 🔹 결과 교체
-                            result = fallback_result
-                            tool_results[-1] = fallback_result
-
-                            # 🔹 툴 이름도 web_search로 교체 (프롬프트 선택 영향)
-                            executed_tool_names = [
-                                "web_search" 
-                            ]
-
-                            # 🔹 프론트로 상태 알림
+                            log_tool_event("FALLBACK", f"{tool_name} 실패 → Google 검색으로 대체", {"query": args.get("query")})
+                            result = enhanced_web_search(args.get("query", ""), args.get("count", 8), args.get("time_range", "any"))
+                            tool_results[-1] = result
+                            executed_tool_names = ["web_search"]
                             yield _sse("status", "법제처 API 실패로 Google 검색으로 대체합니다.")
 
                         formatted = format_tool_result_for_prompt(tool_name, result)
                         tool_results_texts.append(formatted)
 
-                        done_status = meta.get("done")
-                        if done_status:
-                            yield _sse("status", done_status)
+                        if meta.get("done"):
+                            yield _sse("status", meta["done"])
 
                         source_items = extract_source_items(tool_name, result)
                         if source_items:
@@ -598,24 +578,18 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
                         else:
                             yield _sse("sources", result)
                     except Exception as e:
-                        yield _sse("status", f"{tool_name} 실행 중 오류가 발생했습니다.")
+                        yield _sse("status", f"{tool_name} 실행 중 오류 발생")
                         yield _sse("error", f"툴 실행 오류: {str(e)}")
             else:
-                log_tool_event("TOOL-RUN", "선택된 도구 없음 - 바로 답변", None)
                 yield _sse("status", "도구 없이 바로 답변을 생성합니다.")
+                log_tool_event("TOOL-RUN", "도구 없음", None)
+
+            # ✅ 최종 답변 생성
             log_tool_event("CTX-BUILD", "도구 결과 컨텍스트 구성", {"count": len(tool_results_texts), "tools": executed_tool_names or planned_tool_names})
             final_messages = history_messages + build_followup_messages(
                 query.question, tool_results_texts, executed_tool_names or planned_tool_names
             )
 
-            # ✅ 추가: 모델 입력 로그
-            log_tool_event("CTX-IN", "최종 답변 모델 입력 메시지", {
-                "messages": [
-                    f"{m['role']}: {m['content'][:200]}..." for m in final_messages
-                ]
-            })
-
-            log_tool_event("MODEL", "최종 답변 스트리밍 시작", {"messages": len(final_messages)})
             yield _sse("status", "응답을 작성하는 중입니다.")
             stream = client.chat.completions.create(
                 model="gpt-4.1-mini",
@@ -632,21 +606,31 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
 
             full_answer = "".join(collected_chunks)
 
-            # ✅ 요약 생성(모델 호출) 후 함께 저장
+            # ✅ 답변 요약 및 DB 저장 (assistant)
             log_tool_event("MODEL", "최종 답변 스트리밍 완료", {"chars": len(full_answer)})
             summary = summarize_answer_with_model(full_answer)
             log_tool_event("SUMMARY", "요약 생성 완료", {"preview": summary})
-            db_session.add(ChatLog(
-                conversation_id=query.conversation_id,
-                role="assistant",
-                user_id="system",
-                content=full_answer,
-                summary=summary,
-            ))
-            db_session.commit()
 
-            yield _sse("done", {"choices": [{"finish_reason": "stop"}]})
-        finally:
-            db_session.close()
+            try:
+                db.add(ChatLog(
+                    conversation_id=query.conversation_id,
+                    role="assistant",
+                    user_id="system",
+                    content=full_answer,
+                    summary=summary,
+                ))
+                db.commit()
+                log_tool_event("DB", "assistant 저장 완료", {"chars": len(full_answer)})  #  저장 확인 로그
+                yield _sse("done", {"choices": [{"finish_reason": "stop"}]}) #  커밋 후 done 이벤트 전송
+            except Exception as e:
+                db.rollback()
+                log_tool_event("DB", "assistant 저장 실패", {"error": str(e)})
+                yield _sse("error", f"DB 저장 오류: {str(e)}")
+
+        except Exception as e:
+            db.rollback()
+            log_tool_event("DB", "user 저장 또는 전체 스트림 오류", {"error": str(e)})
+            yield _sse("error", f"스트리밍 중 오류 발생: {str(e)}")
+
 
     return StreamingResponse(_stream_response_generator(), media_type="text/event-stream")
