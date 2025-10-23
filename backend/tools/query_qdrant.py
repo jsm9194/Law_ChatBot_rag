@@ -5,6 +5,9 @@ from qdrant_client import QdrantClient
 from .law_mapping import make_law_link
 import dotenv
 
+from .search_google import google_search
+import numpy as np
+
 dotenv.load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -42,6 +45,8 @@ def rewrite_query_for_search(query: str, model: str = "gpt-4.1-mini") -> str:
         return query  # 실패 시 원문 그대로 사용
 
 
+
+
 def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
     """
     Qdrant에서 관련 법령 검색 후 LLM으로 리라이팅된 쿼리 기반 검색.
@@ -61,7 +66,7 @@ def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
 
     # 3) Qdrant 검색
     try:
-        search_results = qdrant.search(  # 최신 API
+        search_results = qdrant.search(  
             collection_name=COLLECTION_NAME,
             query_vector=embedding,
             limit=top_k,
@@ -69,6 +74,16 @@ def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
         )
     except Exception as e:
         return {"query": query, "error": f"Qdrant 검색 실패: {e}"}
+    
+    # ✅ 4) 유사도 점검 (상위 2개 평균)
+    if search_results:
+        sorted_scores = sorted([r.score for r in search_results], reverse=True)
+        top_scores = sorted_scores[:2]  # 상위 2개만
+        avg_score = sum(top_scores) / len(top_scores)
+    else:
+        avg_score = 0.0
+
+    print(f"[RAG 상위 2개 평균 유사도] {avg_score:.3f}")
 
     # 4) 결과 정리
     sources = []
@@ -98,11 +113,31 @@ def ask(query: str, model: str = "gpt-4.1-mini", top_k: int = 5):
 
         context_chunks.append(f"[{idx}] {law_name} 제{jo}조: {text}")
 
+    # ✅ 5) Fallback 조건: 결과 없음 or 평균 유사도 낮음
+    web_results = None
+    if not search_results or avg_score < 0.55:
+        print("[Fallback] RAG 결과가 부족하여 Google Search 병행 실행")
+        web_results = google_search(rewritten_query)
+
+        # ✅ 병합 형태: 웹 검색 결과를 context 뒤에 추가
+        if "results" in web_results:
+            for idx, item in enumerate(web_results["results"], start=len(sources)+1):
+                sources.append({
+                    "id": idx,
+                    "law": "웹검색결과",
+                    "article": item["title"],
+                    "url": item["link"]
+                })
+                context_chunks.append(f"[{idx}] {item['title']}: {item['snippet']}")
+    
+
     return {
         "original_query": query,
         "rewritten_query": rewritten_query,
         "context": context_chunks,
-        "sources": sources
+        "sources": sources,
+        "avg_score": avg_score,
+        "used_fallback": bool(web_results)
     }
 
 

@@ -19,7 +19,7 @@ from routers import conversations, messages
 # 툴 모듈
 from tools.query_qdrant import ask as ask_law
 from tools.case_api import search_case_list, get_case_detail
-from tools.search_goolge import google_search
+from tools.search_google import google_search
 
 # 툴 정의
 from tools.tools_config import tools, TOOL_MESSAGES
@@ -365,9 +365,9 @@ def load_history(db: Session, conversation_id: str, recent_turns: int = 3, max_l
     logs = (
         db.query(ChatLog)
         .filter(ChatLog.conversation_id == conversation_id)
-        .order_by(ChatLog.created_at.asc())
+        .order_by(ChatLog.created_at.desc())
         .limit(max_logs)
-        .all()
+        .all()[::-1]
     )
 
     # user/assistant만 필터
@@ -526,13 +526,13 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
     async def _stream_response_generator() -> AsyncIterator[str]:
         try:
             # ✅ 질문 저장 (user)
-            db.add(ChatLog(
-                conversation_id=query.conversation_id,
-                role="user",
-                user_id="user",
-                content=query.question,
-            ))
-            db.commit()
+            # db.add(ChatLog(
+            #     conversation_id=query.conversation_id,
+            #     role="user",
+            #     user_id="user",
+            #     content=query.question,
+            # ))
+            # db.commit()
 
             # prep_message가 있으면 먼저 스트림 전송
             if prep_message:
