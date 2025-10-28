@@ -1,0 +1,107 @@
+version: "3.8"
+
+services:
+  # -------------------
+  # 🐬 MySQL (RDB)
+  # -------------------
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 3600
+      MYSQL_DATABASE: lawdb
+      MYSQL_USER: lawChat_admin
+      MYSQL_PASSWORD: 3600
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  # -------------------
+  # 🧠 Qdrant (Vector DB)
+  # -------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # -------------------
+  # 🧩 Vector Loader (자동 임베딩 로더) 처음 한번만
+  # -------------------
+  # vector_loader:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: vector_loader
+  #   depends_on:
+  #     - qdrant
+  #   environment:
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - QDRANT_HOST=qdrant
+  #     - QDRANT_PORT=6333
+  #     - LAW_OC_ID=${LAW_OC_ID}
+  #     - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+  #     - GOOGLE_CX=${GOOGLE_CX}
+  #   volumes:
+  #     - ./backend/DATA:/app/DATA
+  #   command: >
+  #     sh -c "
+  #     until nc -z qdrant 6333; do
+  #       echo '⏳ waiting for qdrant...';
+  #       sleep 2;
+  #     done;
+  #     python DATA/embed_laws.py
+  #     "
+
+  # -------------------
+  # ⚡ FastAPI (Backend)
+  # -------------------
+  fastapi:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fastapi
+    restart: always
+    depends_on:
+      - qdrant
+      - mysql
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LAW_OC_ID=${LAW_OC_ID}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CX=${GOOGLE_CX}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=비밀번호
+      - MYSQL_DB=lawdb
+      - QDRANT_URL=http://qdrant:6333
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "
+      until nc -z mysql 3306; do
+        echo '⏳ waiting for mysql...';
+        sleep 2;
+      done;
+      until curl -s http://qdrant:6333/collections/laws | grep -q '\"status\":\"green\"'; do
+        echo '⏳ waiting for Qdrant collection ready...';
+        sleep 3;
+      done;
+      echo '✅ Qdrant 컬렉션 준비 완료, FastAPI 시작';
+      python DB/init_db.py &&
+      uvicorn main:app --host 0.0.0.0 --port 8000
+      "
+
+volumes:
+  mysql_data:
+  qdrant_data:

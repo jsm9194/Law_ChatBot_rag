@@ -1,4 +1,4 @@
-"""
+﻿"""
 DB에 실제로 데이터를 넣고/빼는 함수 모음
 주요 기능:
 create_conversation → 새 대화방 생성
@@ -10,7 +10,7 @@ FastAPI에서 직접 DB에 쿼리하지 않고, 이 CRUD 함수를 통해서만 
 
 from uuid import uuid4
 from sqlalchemy.orm import Session
-from .models import Conversation, ChatLog
+from DB.models import Conversation, ChatLog
 
 # 새 대화 시작
 def create_conversation(db: Session, user_id: str, title: str = None):
@@ -33,10 +33,6 @@ def get_conversations(db: Session, user_id: str, limit: int = 20):
 
 # 특정 대화 메시지 불러오기 (레이지 로딩 적용)
 def get_conversation_logs(db: Session, conversation_id: str, offset: int = 0, limit: int = 20):
-    """
-    offset: 불러올 시작 위치 (0부터 시작)
-    limit: 불러올 개수
-    """
     return (
         db.query(ChatLog)
         .filter(ChatLog.conversation_id == conversation_id)
@@ -49,6 +45,7 @@ def get_conversation_logs(db: Session, conversation_id: str, offset: int = 0, li
 # 메시지 저장
 def save_message(db: Session, conversation_id: str, user_id: str, role: str, content: str):
     log = ChatLog(
+        id=str(uuid4()),
         conversation_id=conversation_id,
         user_id=user_id,
         role=role,

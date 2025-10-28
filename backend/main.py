@@ -525,16 +525,7 @@ def ask_api(query: Query, request: Request, db: Session = Depends(get_db)):
 
     async def _stream_response_generator() -> AsyncIterator[str]:
         try:
-            # ✅ 질문 저장 (user)
-            # db.add(ChatLog(
-            #     conversation_id=query.conversation_id,
-            #     role="user",
-            #     user_id="user",
-            #     content=query.question,
-            # ))
-            # db.commit()
-
-            # prep_message가 있으면 먼저 스트림 전송
+            # prep_message(모델 생각)가 있으면 먼저 스트림 전송
             if prep_message:
                 yield _sse("prep", prep_message)
 

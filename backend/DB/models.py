@@ -7,27 +7,38 @@ Base를 상속받아 테이블로 매핑됨
 """
 
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from datetime import datetime
-from .database import Base
+from DB.database import Base
+import uuid
 
 
 class Conversation(Base):
     __tablename__ = "conversations"
 
-    id = Column(String, primary_key=True, index=True)   # UUID
-    user_id = Column(String, index=True)                # 사용자 ID
-    title = Column(String, nullable=True)               # 대화 제목 (첫 질문 요약 등)
-    created_at = Column(DateTime, default=datetime.now)
+    id = Column(String(36), primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(50), index=True, nullable=False)
+    title = Column(String(255), default="새 대화")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    chat_logs = relationship(
+        "ChatLog",
+        back_populates="conversation",
+        cascade="all, delete-orphan"
+    )
 
 
 class ChatLog(Base):
     __tablename__ = "chat_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(String, ForeignKey("conversations.id"))  # 연결
-    user_id = Column(String, index=True)
-    role = Column(String)       # "user" or "assistant"
+    id = Column(String(36), primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"))
+    user_id = Column(String(50), index=True, nullable=False)
+    role = Column(String(50))
     content = Column(Text)
-    summary = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    summary = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    conversation = relationship("Conversation", back_populates="chat_logs")

@@ -14,13 +14,13 @@ from tqdm import tqdm
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-qdrant = QdrantClient(host="localhost", port=6333)
+qdrant = QdrantClient(host="qdrant", port=6333)
 
 COLLECTION_NAME = "laws"
 DIM = 3072  # text-embedding-3-large 차원 수
 BATCH_SIZE = 100  # 임베딩 배치 크기
 MAX_RETRIES = 3   # 재시도 횟수
-INPUT_DIR = "./ChunkedData"
+INPUT_DIR = "./DATA/ChunkedData"
 
 # --------------------------
 # Qdrant 컬렉션 초기화

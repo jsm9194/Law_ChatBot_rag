@@ -85,6 +85,13 @@ uvicorn main:app --reload
 
 👉 기본 실행 주소: [http://localhost:8000](http://localhost:8000)
 
+상황 명령어 설명
+
+- 서버 켜기 **docker compose up -d** 자동으로 mysql → qdrant → fastapi 순서로 실행됨
+- 서버 끄기 **docker compose down** 모든 컨테이너 정리 (데이터는 유지)
+- 완전 초기화 (데이터 삭제 포함) **docker compose down -v** Qdrant, MySQL 데이터 전부 리셋
+- 로그 보기 **docker logs -f fastapi** 실시간으로 FastAPI 로그 확인
+
 ---
 
 ## 📌 향후 개발 계획
