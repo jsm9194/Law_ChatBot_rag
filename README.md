@@ -20,7 +20,6 @@ ChatGPT 스타일 UI를 기반으로, 질문에 대한 답변과 함께 **출처
 ### Frontend
 
 - [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-- [Vite](https://vitejs.dev/) → 빠른 개발 환경
 - [TailwindCSS](https://tailwindcss.com/) v4 → UI 스타일링
 - Custom Components (ChatGPT 스타일 채팅창, 사이드바, 출처 뷰어)
 
@@ -28,6 +27,7 @@ ChatGPT 스타일 UI를 기반으로, 질문에 대한 답변과 함께 **출처
 
 - [FastAPI](https://fastapi.tiangolo.com/) → API 서버
 - 법제처 OpenAPI, 판례 검색 API 연동
+- 구글 searchAPI 웹 검색 뉴스, 나무위키 등등
 
 ### RAG (검색/임베딩)
 
